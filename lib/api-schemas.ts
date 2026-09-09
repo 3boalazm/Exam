@@ -9,7 +9,12 @@ const questionTypeSchema = z.enum(["MCQ", "TRUE_FALSE", "MATCHING", "ORDERING"])
 export const generateExamSchema = z.object({
   title: z.string().trim().min(3).max(80),
   subject: z.string().trim().min(2).max(40),
-  topic: z.string().trim().min(2).max(60),
+  topics: z
+    .array(z.string().trim().min(2).max(60))
+    .min(1)
+    .max(10)
+    .refine((v) => new Set(v).size === v.length, "الوحدات يجب أن تكون مختلفة"),
+  generationSource: z.enum(["bank", "ai"]).default("bank"),
   subtopic: z.string().trim().max(60).optional().nullable(),
   questionTypes: z
     .array(questionTypeSchema)

@@ -29,6 +29,7 @@ export const GET = publicHandler(async (_req, { params }) => {
     title: exam.title,
     subject: exam.subject,
     topic: exam.topic,
+    topics: exam.topics ?? [exam.topic],
     subtopic: exam.subtopic,
     questionCount: questions.length,
     showResult: exam.showResult,

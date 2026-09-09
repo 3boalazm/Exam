@@ -7,6 +7,8 @@ export type Difficulty = "easy" | "medium" | "hard" | "mixed";
 
 export type ExamStatus = "draft" | "published" | "closed";
 
+export type GenerationSource = "bank" | "ai";
+
 /* ---------- بيانات السؤال حسب النوع ---------- */
 
 export interface MCQData {
@@ -69,7 +71,12 @@ export interface Exam {
   teacherId: string;
   title: string;
   subject: string;
+  /** أول وحدة مختارة — محفوظ للتوافق مع البيانات القديمة */
   topic: string;
+  /** الوحدات المختارة (اختياري لأن الامتحانات القديمة لا تحتوي عليه) */
+  topics?: string[];
+  /** مصدر التوليد (اختياري لأن الامتحانات القديمة لا تحتوي عليه) */
+  generationSource?: GenerationSource;
   subtopic?: string;
   difficulty: Difficulty;
   questionTypes: QuestionType[];
@@ -91,7 +98,9 @@ export interface PublicExam {
   code: string;
   title: string;
   subject: string;
+  /** أول وحدة مختارة — للتوافق مع العملاء والبيانات القديمة */
   topic: string;
+  topics: string[];
   subtopic?: string;
   questionCount: number;
   showResult: boolean;
@@ -146,7 +155,10 @@ export interface AttemptWithAnswers extends Attempt {
 export interface ExamSettings {
   title: string;
   subject: string;
+  /** أول وحدة مختارة — للتوافق مع مسار التوليد القديم */
   topic: string;
+  topics: string[];
+  generationSource: GenerationSource;
   subtopic?: string;
   questionTypes: QuestionType[];
   difficulty: Difficulty;

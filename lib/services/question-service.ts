@@ -211,5 +211,9 @@ export async function regenerateQuestion(
     solution: replacement.solution,
     points: question.points,
     bankId: replacement.bankId,
+    subject: replacement.subject ?? question.subject,
+    topic: replacement.topic ?? question.topic,
+    subtopic: replacement.subtopic ?? question.subtopic,
+    difficulty: replacement.difficulty ?? question.difficulty,
   });
 }

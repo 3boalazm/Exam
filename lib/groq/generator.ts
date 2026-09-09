@@ -8,6 +8,7 @@ import { TYPE_LABELS } from "@/lib/questions/validator";
 import type { BankQuestion } from "@/lib/bank";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+export const GROQ_REQUEST_TIMEOUT_MS = 45_000;
 
 export interface PromptParts {
   system: string;
@@ -61,6 +62,17 @@ const SYSTEM_PROMPT = `أنت خبير في صياغة أسئلة الامتحا
 7. اكتب بالعربية الفصحى المبسطة مناسبة لمستوى المرحلة الثانوية.
 8. ارجع JSON صالحًا 100% بدون تعليقات ولا Markdown.`;
 
+function topicPromptLines(settings: ExamSettings): string {
+  // fallback يحافظ على عمل أي استدعاء داخلي قديم لا يمرر topics بعد.
+  const topics = settings.topics?.length ? settings.topics : [settings.topic];
+  return [
+    `الموضوع: ${topics.join("، ")}`,
+    topics.length > 1 ? "وزّع الأسئلة على هذه الوحدات بالتساوي" : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 /**
  * برومبت توليد دفعة كاملة (المطلوب N سؤال موزعين على أنواع محددة)
  */
@@ -75,13 +87,13 @@ export function buildBatchPrompt(
 
   const user = `أنشئ أسئلة امتحان بالمواصفات التالية:
 المادة: ${settings.subject}
-الموضوع: ${settings.topic}
+${topicPromptLines(settings)}
 ${settings.subtopic ? `الموضوع الفرعي: ${settings.subtopic}` : ""}
 الصعوبة: ${DIFFICULTY_AR[settings.difficulty]}
 المطلوب بالضبط: ${settings.questionCount} سؤالًا موزعة كالتالي: ${typeLine}.
 
 أسئلة مرجعية بنفس النمط (تعلّم النمط والصياغة من هذه الأمثلة، ولا تنسخها حرفيًا — بدّل الأرقام والقيم):
-${refs.length ? JSON.stringify(refs.map((r) => ({ type: r.type, question: r.question, data: r.data, correctAnswer: r.correctAnswer, solution: r.solution })), null, 2) : "لا توجد أمثلة مرجعية، اعتمد على فهمك للموضوع"}
+${refs.length ? JSON.stringify(refs.map((r) => ({ topic: r.topic, type: r.type, question: r.question, data: r.data, correctAnswer: r.correctAnswer, solution: r.solution })), null, 2) : "لا توجد أمثلة مرجعية، اعتمد على فهمك للموضوع"}
 
 أعد JSON فقط بالصيغة المتفق عليها.`;
 
@@ -98,7 +110,7 @@ export function buildSinglePrompt(
 ): PromptParts {
   const user = `أنشئ سؤالًا واحدًا فقط:
 المادة: ${settings.subject}
-الموضوع: ${settings.topic}
+${topicPromptLines(settings)}
 ${settings.subtopic ? `الموضوع الفرعي: ${settings.subtopic}` : ""}
 الصعوبة: ${DIFFICULTY_AR[settings.difficulty]}
 النوع المطلوب: ${TYPE_LABELS[type]} (${type})
@@ -115,53 +127,73 @@ ${reference ? `سؤال مرجعي — أنشئ سؤالًا مشابهًا بن
 export async function callGroqJSON(
   system: string,
   user: string,
-  temperature = 0.9
+  temperature = 0.9,
+  timeoutMs = GROQ_REQUEST_TIMEOUT_MS
 ): Promise<unknown> {
   const key = process.env.GROQ_API_KEY;
   if (!key) throw new Error("GROQ_API_KEY غير محدد");
   const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
-  const res = await fetch(GROQ_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      temperature,
-      max_tokens: 4000,
-      response_format: { type: "json_object" },
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Groq API error ${res.status}: ${text.slice(0, 200)}`);
-  }
-
-  const json = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = json.choices?.[0]?.message?.content;
-  if (typeof content !== "string" || !content.trim()) {
-    throw new Error("Groq أعاد إجابة فارغة");
-  }
-
-  // تنظيف أي Markdown fences محتملة
-  const cleaned = content
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "")
-    .trim();
+  // لا نسمح لأي نداء بتجاوز 45 ثانية. يمكن للمحرك تمرير مهلة أقصر
+  // عندما لا يتبقى من ميزانية Vercel الإجمالية سوى بضع ثوانٍ.
+  const requestTimeout = Math.max(
+    1,
+    Math.min(timeoutMs, GROQ_REQUEST_TIMEOUT_MS)
+  );
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), requestTimeout);
 
   try {
-    return JSON.parse(cleaned);
-  } catch {
-    throw new Error("تعذر تحليل JSON من Groq");
+    const res = await fetch(GROQ_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        temperature,
+        max_tokens: 4000,
+        response_format: { type: "json_object" },
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Groq API error ${res.status}: ${text.slice(0, 200)}`);
+    }
+
+    const json = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const content = json.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      throw new Error("Groq أعاد إجابة فارغة");
+    }
+
+    // تنظيف أي Markdown fences محتملة
+    const cleaned = content
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+
+    try {
+      return JSON.parse(cleaned);
+    } catch {
+      throw new Error("تعذر تحليل JSON من Groq");
+    }
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error("انتهت مهلة الاتصال بـ Groq");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

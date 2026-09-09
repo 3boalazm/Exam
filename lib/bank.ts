@@ -50,6 +50,7 @@ export function getBankSubject(): string {
 export interface BankQuery {
   subject?: string;
   topic?: string;
+  topics?: string[];
   subtopic?: string;
   type?: QuestionType;
   limit?: number;
@@ -59,7 +60,7 @@ export interface BankQuery {
   excludeIds?: string[];
 }
 
-/** بحث في بنك الأسئلة مع خلط حتمي */
+/** بحث في بنك الأسئلة مع خلط عشوائي للنتائج */
 export function findBankQuestions(opts: BankQuery): BankQuestion[] {
   const exclude = new Set((opts.excludeTexts ?? []).map(normalizeText));
   const excludeIds = new Set(opts.excludeIds ?? []);
@@ -68,6 +69,10 @@ export function findBankQuestions(opts: BankQuery): BankQuestion[] {
     (q) => !opts.subject || q.subject === opts.subject
   );
   if (opts.topic) qs = qs.filter((q) => q.topic === opts.topic);
+  if (opts.topics) {
+    const topics = new Set(opts.topics);
+    qs = qs.filter((q) => topics.has(q.topic));
+  }
   if (opts.type) qs = qs.filter((q) => q.type === opts.type);
   if (opts.subtopic) {
     const withSub = qs.filter((q) => q.subtopic === opts.subtopic);
@@ -77,6 +82,10 @@ export function findBankQuestions(opts: BankQuery): BankQuestion[] {
     (q) => !exclude.has(normalizeText(q.question)) && !excludeIds.has(q.id)
   );
 
-  const shuffled = seededShuffle(qs, `${opts.topic}-${opts.type}-${Date.now() % 1000}`);
+  const topicSeed = opts.topics?.join(",") ?? opts.topic;
+  const shuffled = seededShuffle(
+    qs,
+    `${topicSeed}-${opts.type}-${Date.now()}-${Math.random()}`
+  );
   return opts.limit ? shuffled.slice(0, opts.limit) : shuffled;
 }

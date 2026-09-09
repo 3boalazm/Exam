@@ -9,31 +9,36 @@ import {
   Card,
   Field,
   Input,
-  PageLoader,
   Select,
   Spinner,
 } from "@/components/ui";
 import { apiFetch, useTeacher } from "@/lib/client";
 import { TYPE_LABELS, QUESTION_TYPES } from "@/lib/questions/validator";
-import type { Difficulty, QuestionType } from "@/lib/questions/types";
+import type {
+  Difficulty,
+  GenerationSource,
+  QuestionType,
+} from "@/lib/questions/types";
 
 const GENERATING_STEPS = [
   "جارٍ تجهيز الإعدادات...",
-  "بناء البرومبت مع بنك الأسئلة المرجعي...",
-  "Groq يولّد الأسئلة...",
-  "التحقق من صحة كل سؤال (Zod + Math)...",
+  "قراءة بنك الأسئلة والوحدات المختارة...",
+  "اختيار الأسئلة وتوزيعها...",
+  "التحقق من صحة كل سؤال...",
   "فحص التكرار...",
-  "الحفظ في Firestore...",
+  "الحفظ في قاعدة البيانات...",
 ];
 
 export default function NewExamPage() {
   const router = useRouter();
   const { config } = useTeacher();
   const [subject, setSubject] = useState("");
-  const [topic, setTopic] = useState("");
+  const [topics, setTopics] = useState<string[]>([]);
   const [subtopic, setSubtopic] = useState("");
   const [title, setTitle] = useState("");
-  const [types, setTypes] = useState<QuestionType[]>(["MCQ", "TRUE_FALSE"]);
+  const [generationSource, setGenerationSource] =
+    useState<GenerationSource>("bank");
+  const [types, setTypes] = useState<QuestionType[]>(["MCQ"]);
   const [difficulty, setDifficulty] = useState<Difficulty>("mixed");
   const [count, setCount] = useState(10);
   const [busy, setBusy] = useState(false);
@@ -42,7 +47,11 @@ export default function NewExamPage() {
 
   useEffect(() => {
     if (config?.subject) setSubject(config.subject);
-    if (config?.topics?.length) setTopic(config.topics[0].name);
+    if (config?.topics?.length) {
+      setTopics((current) =>
+        current.length ? current : [config.topics[0].name]
+      );
+    }
   }, [config]);
 
   // رسائل توليد متحركة أثناء الانتظار
@@ -56,8 +65,20 @@ export default function NewExamPage() {
     return () => clearInterval(t);
   }, [busy]);
 
-  const currentTopic = config?.topics?.find((t) => t.name === topic);
+  const currentTopic =
+    topics.length === 1
+      ? config?.topics?.find((t) => t.name === topics[0])
+      : undefined;
   const hasSubtopics = (currentTopic?.subtopics?.length ?? 0) > 0;
+
+  function toggleTopic(topic: string) {
+    const next = topics.includes(topic)
+      ? topics.filter((item) => item !== topic)
+      : [...topics, topic];
+    setTopics(next);
+    // الدرس الفرعي له معنى فقط عندما تكون هناك وحدة واحدة مختارة.
+    if (next.length !== 1 || next[0] !== topics[0]) setSubtopic("");
+  }
 
   function toggleType(t: QuestionType) {
     setTypes((prev) =>
@@ -67,6 +88,10 @@ export default function NewExamPage() {
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
+    if (topics.length === 0) {
+      setError("اختر وحدة واحدة على الأقل");
+      return;
+    }
     if (types.length === 0) {
       setError("اختر نوع سؤال واحدًا على الأقل");
       return;
@@ -76,10 +101,11 @@ export default function NewExamPage() {
     try {
       const res = await apiFetch<{ exam: { id: string } }>("/api/exams/generate", {
         body: {
-          title: title.trim() || `اختبار ${topic}`,
+          title: title.trim() || `اختبار ${topics[0]}`,
           subject,
-          topic,
-          subtopic: subtopic || undefined,
+          topics,
+          generationSource,
+          subtopic: topics.length === 1 ? subtopic || undefined : undefined,
           questionTypes: types,
           difficulty,
           questionCount: count,
@@ -103,7 +129,9 @@ export default function NewExamPage() {
             </div>
             <div className="text-sm text-slate-500">{GENERATING_STEPS[stepIdx]}</div>
             <div className="text-xs text-slate-400">
-              قد يستغرق من 10 إلى 60 ثانية حسب عدد الأسئلة
+              {generationSource === "bank"
+                ? "يتم الاختيار مباشرة من بنك الأسئلة"
+                : "قد يستغرق حتى 50 ثانية حسب عدد الأسئلة"}
             </div>
           </div>
         </Card>
@@ -118,7 +146,7 @@ export default function NewExamPage() {
                   placeholder="اختبار المتتابعات الحسابية"
                 />
               </Field>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-4">
                 <Field label="المادة">
                   <Input
                     value={subject}
@@ -126,23 +154,45 @@ export default function NewExamPage() {
                     placeholder="رياضيات"
                   />
                 </Field>
-                <Field label="الموضوع / الوحدة">
-                  <Select
-                    value={topic}
-                    onChange={(e) => {
-                      setTopic(e.target.value);
-                      setSubtopic("");
-                    }}
-                  >
-                    {(config?.topics ?? []).map((t) => (
-                      <option key={t.name} value={t.name}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+                <div>
+                  <span className="mb-1.5 block text-sm font-semibold text-slate-700">
+                    الموضوع / الوحدة
+                  </span>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {(config?.topics ?? []).map((t) => {
+                      const checked = topics.includes(t.name);
+                      const disabled = !checked && topics.length >= 10;
+                      return (
+                        <label
+                          key={t.name}
+                          className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                            checked
+                              ? "cursor-pointer border-indigo-400 bg-indigo-50"
+                              : disabled
+                                ? "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60"
+                                : "cursor-pointer border-slate-200 bg-white hover:border-slate-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={() => toggleTopic(t.name)}
+                            className="h-5 w-5 accent-indigo-600"
+                          />
+                          <span className="font-semibold text-slate-800">
+                            {t.name}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <span className="mt-1 block text-xs text-slate-400">
+                    يمكنك اختيار وحدة واحدة أو أكثر (بحد أقصى 10)
+                  </span>
+                </div>
               </div>
-              {hasSubtopics && (
+              {topics.length === 1 && hasSubtopics && (
                 <Field label="الدرس / الموضوع الفرعي">
                   <Select
                     value={subtopic}
@@ -160,7 +210,59 @@ export default function NewExamPage() {
             </div>
           </Card>
 
-          <Card title="2) أنواع الأسئلة">
+          <Card title="2) طريقة التوليد">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label
+                className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-4 transition-colors ${
+                  generationSource === "bank"
+                    ? "border-indigo-400 bg-indigo-50"
+                    : "border-slate-200 bg-white hover:border-slate-300"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="generation-source"
+                  checked={generationSource === "bank"}
+                  onChange={() => setGenerationSource("bank")}
+                  className="mt-1 h-5 w-5 accent-indigo-600"
+                />
+                <span>
+                  <span className="block font-bold text-slate-800">
+                    عشوائي من بنك الأسئلة
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">
+                    الأسرع والأكثر ثباتًا — يختار من الداتا مباشرة بدون Groq.
+                  </span>
+                </span>
+              </label>
+
+              <label
+                className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-4 transition-colors ${
+                  generationSource === "ai"
+                    ? "border-indigo-400 bg-indigo-50"
+                    : "border-slate-200 bg-white hover:border-slate-300"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="generation-source"
+                  checked={generationSource === "ai"}
+                  onChange={() => setGenerationSource("ai")}
+                  className="mt-1 h-5 w-5 accent-indigo-600"
+                />
+                <span>
+                  <span className="block font-bold text-slate-800">
+                    توليد بالذكاء الاصطناعي
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">
+                    يستخدم Groq، وقد يستغرق وقتًا أطول حسب الاتصال.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </Card>
+
+          <Card title="3) أنواع الأسئلة">
             <div className="grid gap-3 sm:grid-cols-2">
               {QUESTION_TYPES.map((t) => (
                 <label
@@ -184,7 +286,7 @@ export default function NewExamPage() {
             </div>
           </Card>
 
-          <Card title="3) الإعدادات">
+          <Card title="4) الإعدادات">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="الصعوبة">
                 <Select

@@ -159,7 +159,8 @@ export default function DashboardPage() {
                         )}
                       </div>
                       <div className="mt-1 text-sm text-slate-400">
-                        {row.exam.subject} · {row.exam.topic}
+                        {row.exam.subject} ·{" "}
+                        {(row.exam.topics ?? [row.exam.topic]).join("، ")}
                         {row.exam.subtopic ? ` · ${row.exam.subtopic}` : ""} ·{" "}
                         {row.exam.questionCount} سؤال · {formatDateTime(row.exam.createdAt)}
                       </div>

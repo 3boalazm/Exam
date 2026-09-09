@@ -7,7 +7,7 @@
         ↓
 اختيار الدرس ونوع الأسئلة
         ↓
-توليد الامتحان (Groq + Validation)
+توليد الامتحان (بنك الأسئلة أو Groq + Validation)
         ↓
 مراجعة المعلم (تعديل / إعادة توليد / حذف)
         ↓
@@ -26,7 +26,8 @@
 
 ## ✨ المميزات
 
-- **توليد أسئلة بالذكاء الاصطناعي** (Groq) بناءً على بنك أسئلة مرجعي — مع Pipeline تحقق كامل قبل دخول أي سؤال الامتحان.
+- **طريقتان للتوليد**: اختيار عشوائي سريع من بنك الأسئلة مباشرة (الافتراضي)، أو توليد بالذكاء الاصطناعي عبر Groq.
+- **توليد Groq اختياري** بناءً على بنك أسئلة مرجعي — مع Pipeline تحقق كامل قبل دخول أي سؤال الامتحان.
 - **4 أنواع أسئلة**: اختيار من متعدد (MCQ)، صح/غلط، توصيل (Matching)، ترتيب (Ordering).
 - **التحكم للمعلم**: المادة، الموضوع، الدرس، أنواع الأسئلة، العدد، الصعوبة.
 - **مراجعة كاملة قبل النشر**: تعديل نص/اختيارات/إجابة/درجة/حل، إعادة توليد سؤال بديل، حذف، إعادة ترتيب، إضافة سؤال يدويًا.
@@ -64,7 +65,7 @@ npm run dev
 
 افتح `http://localhost:3000` وسجّل دخولًا بأي بريد (الوضع التجريبي تلقائيًا إذا لم توجد مفاتيح Firebase).
 
-> **الوضع التجريبي**: بدون `GROQ_API_KEY` يُولَّد الاختبار من **بنك الأسئلة المحلي** (`data/mathematics.json`) بدل Groq، وبتخزين مؤقت محلي بدل Firestore. مثالي للتجربة والإبلاغ.
+> **الوضع التجريبي**: الاختيار من **بنك الأسئلة المحلي** (`data/mathematics.json`) هو الوضع الافتراضي ولا يحتاج Groq. وإذا اختير AI بدون `GROQ_API_KEY` يرجع النظام تلقائيًا للبنك. التخزين يكون محليًا بدل Firestore. مثالي للتجربة والإبلاغ.
 
 ### اختبار الـ Flow كاملًا عبر API
 
@@ -72,7 +73,7 @@ npm run dev
 # توليد امتحان (معلم تجريبي)
 curl -X POST http://localhost:3000/api/exams/generate \
   -H "Content-Type: application/json" -H "x-demo-teacher: demo-ahmed" \
-  -d '{"title":"اختبار المتتابعات","subject":"رياضيات","topic":"المتتابعات الحسابية","questionTypes":["MCQ","TRUE_FALSE"],"difficulty":"mixed","questionCount":8}'
+  -d '{"title":"اختبار المتتابعات","subject":"الرياضيات","topics":["المتتابعات والأوساط الحسابية","المتتابعات والأوساط الهندسية"],"generationSource":"bank","questionTypes":["MCQ"],"difficulty":"mixed","questionCount":8}'
 ```
 
 ---
@@ -129,8 +130,8 @@ curl -X POST http://localhost:3000/api/exams/generate \
 
 ```
 teachers/{teacherId}      { name, email, createdAt }
-exams/{examId}            { teacherId, title, subject, topic, subtopic,
-                            difficulty, questionTypes, questionCount,
+exams/{examId}            { teacherId, title, subject, topic, topics[], subtopic,
+                            generationSource(bank|ai), difficulty, questionTypes, questionCount,
                             status(draft|published|closed), code,
                             showResult, whatsappMessage, createdAt, publishedAt }
 questions/{questionId}    { examId, type, question, data, correctAnswer,
@@ -186,7 +187,8 @@ Firestore
 
 - لو فشل سؤال: **Reject → Regenerate** (حتى 3 محاولات منفردة).
 - **Groq لا يملك القرار**: النوع يحدده المعلم، والتصحيح يعمله النظام.
-- **الوضع التجريبي**: بدون مفتاح Groq يُولَّد من `data/mathematics.json`.
+- **بنك الأسئلة هو الافتراضي**: `generationSource: "bank"` يختار عشوائيًا من `data/mathematics.json` حتى لو كان مفتاح Groq موجودًا.
+- عند اختيار `generationSource: "ai"` بدون مفتاح Groq، يرجع النظام تلقائيًا إلى البنك بدل فشل الطلب.
 
 ---
 
