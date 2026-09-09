@@ -6,7 +6,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { randomId } from "@/lib/utils";
-import type { AppStore } from "./types";
+import type { AppStore, GroqSettings } from "./types";
 import type {
   Answer,
   Attempt,
@@ -21,6 +21,8 @@ interface DemoData {
   questions: Question[];
   attempts: Attempt[];
   answers: Answer[];
+  /** مفاتيح Groq اليدوية لكل معلم (معرّف المعلم → الإعدادات) */
+  groqSettings: Record<string, GroqSettings>;
 }
 
 const EMPTY: DemoData = {
@@ -29,6 +31,7 @@ const EMPTY: DemoData = {
   questions: [],
   attempts: [],
   answers: [],
+  groqSettings: {},
 };
 
 export class DemoStore implements AppStore {
@@ -210,5 +213,28 @@ export class DemoStore implements AppStore {
         (a) => a.examId === examId && norm(a.studentPhone) === norm(studentPhone)
       ) ?? null
     );
+  }
+
+  /* ---------------- إعدادات Groq اليدوية (BYOK) ---------------- */
+
+  async getGroqSettings(teacherId: string): Promise<GroqSettings | null> {
+    const d = await this.ready();
+    return d.groqSettings[teacherId] ?? null;
+  }
+
+  async saveGroqSettings(
+    teacherId: string,
+    s: GroqSettings
+  ): Promise<GroqSettings> {
+    const d = await this.ready();
+    d.groqSettings[teacherId] = s;
+    this.save();
+    return s;
+  }
+
+  async deleteGroqSettings(teacherId: string): Promise<void> {
+    const d = await this.ready();
+    delete d.groqSettings[teacherId];
+    this.save();
   }
 }

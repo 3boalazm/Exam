@@ -57,6 +57,12 @@ export function TeacherShell({
             >
               + اختبار جديد
             </Link>
+            <Link
+              href="/settings"
+              className="rounded-lg px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-100"
+            >
+              ⚙️ الإعدادات
+            </Link>
           </nav>
           <div className="ms-auto flex items-center gap-3">
             {isDemo && (

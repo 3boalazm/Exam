@@ -13,6 +13,7 @@ import {
   extractQuestionsArray,
   GROQ_REQUEST_TIMEOUT_MS,
 } from "@/lib/groq/generator";
+import { envGroqCredentials, type GroqCredentials } from "@/lib/groq/settings";
 import { validateQuestion } from "./validator";
 import { findBankQuestions, type BankQuestion } from "@/lib/bank";
 import { normalizeText } from "@/lib/utils";
@@ -112,14 +113,17 @@ function bankToQuestion(b: BankQuestion): GeneratedQuestion {
 }
 
 /**
- * توليد الأسئلة الرئيسية — تُستدعى من GenerationService
+ * توليد الأسئلة الرئيسية — تُستدعى من GenerationService.
+ * credentials: اعتمادات Groq للمعلم (المفتاح اليدوي أولًا ثم متغيرات البيئة).
  */
 export async function generateQuestions(
   settings: ExamSettings,
-  existing: Question[] = []
+  existing: Question[] = [],
+  credentials?: GroqCredentials | null
 ): Promise<GenerationResult> {
   const requestedSource = settings.generationSource ?? "bank";
-  const useAI = requestedSource === "ai" && Boolean(process.env.GROQ_API_KEY);
+  const creds = credentials ?? envGroqCredentials();
+  const useAI = requestedSource === "ai" && Boolean(creds?.apiKey);
   const topics = selectedTopics(settings);
   const slots = allocateTypes(settings.questionTypes, settings.questionCount);
   const perType: Partial<Record<QuestionType, number>> = {};
@@ -204,8 +208,10 @@ export async function generateQuestions(
         `تم التوليد ${questions.length} من ${slots.length} (المحتوى المرجعي غير كافٍ لهذا العدد)`
       );
     }
-    if (requestedSource === "ai" && !process.env.GROQ_API_KEY) {
-      warnings.push("مفتاح Groq غير متاح؛ تم استخدام بنك الأسئلة بدلًا منه");
+    if (requestedSource === "ai" && !creds?.apiKey) {
+      warnings.push(
+        "مفتاح Groq غير متاح؛ تم استخدام بنك الأسئلة بدلًا منه — يمكنك إضافة مفتاحك من صفحة الإعدادات"
+      );
     } else {
       warnings.push("تم اختيار الأسئلة عشوائيًا من بنك الأسئلة مباشرة");
     }
@@ -226,7 +232,8 @@ export async function generateQuestions(
       batch.system,
       batch.user,
       0.9,
-      Math.min(GROQ_REQUEST_TIMEOUT_MS, Math.max(1, deadline - Date.now()))
+      Math.min(GROQ_REQUEST_TIMEOUT_MS, Math.max(1, deadline - Date.now())),
+      creds ?? undefined
     );
     const pool = extractQuestionsArray(data);
     const remaining = [...pool];
@@ -263,7 +270,8 @@ export async function generateQuestions(
           single.system,
           single.user,
           1.0,
-          Math.min(GROQ_REQUEST_TIMEOUT_MS, remainingMs)
+          Math.min(GROQ_REQUEST_TIMEOUT_MS, remainingMs),
+          creds ?? undefined
         );
         const arr = extractQuestionsArray(data);
         results[i] = arr.length
@@ -304,11 +312,13 @@ export async function generateQuestions(
 export async function generateReplacement(
   settings: ExamSettings,
   type: QuestionType,
-  original: Question
+  original: Question,
+  credentials?: GroqCredentials | null
 ): Promise<GeneratedQuestion | null> {
   const topics = selectedTopics(settings);
+  const creds = credentials ?? envGroqCredentials();
   const useAI =
-    settings.generationSource === "ai" && Boolean(process.env.GROQ_API_KEY);
+    settings.generationSource === "ai" && Boolean(creds?.apiKey);
   if (!useAI) {
     // وضع البنك: البديل يظل داخل اتحاد الوحدات المختارة.
     const alt = findBankQuestions({
@@ -336,7 +346,8 @@ export async function generateReplacement(
         single.system,
         single.user,
         1.0,
-        Math.min(GROQ_REQUEST_TIMEOUT_MS, remainingMs)
+        Math.min(GROQ_REQUEST_TIMEOUT_MS, remainingMs),
+        creds ?? undefined
       );
       const arr = extractQuestionsArray(data);
       if (arr.length) {

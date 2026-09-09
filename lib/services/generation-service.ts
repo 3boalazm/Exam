@@ -5,6 +5,7 @@
 import { getStore } from "@/lib/store";
 import { randomId } from "@/lib/utils";
 import { generateQuestions } from "@/lib/questions/generator";
+import { resolveGroqCredentials } from "@/lib/groq/settings";
 import { createDraftExam } from "./exam-service";
 import type {
   Exam,
@@ -34,7 +35,8 @@ export async function generateExam(
   let warnings: string[] = [];
   let generated: Awaited<ReturnType<typeof generateQuestions>>["questions"] = [];
   try {
-    const result = await generateQuestions(settings);
+    const credentials = await resolveGroqCredentials(teacher.id);
+    const result = await generateQuestions(settings, [], credentials);
     generated = result.questions;
     warnings = result.warnings;
   } catch (e) {

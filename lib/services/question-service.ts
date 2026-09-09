@@ -10,6 +10,7 @@ import {
 import { validateQuestion } from "@/lib/questions/validator";
 import { settingsFromExam } from "./exam-service";
 import { generateReplacement } from "@/lib/questions/generator";
+import { resolveGroqCredentials } from "@/lib/groq/settings";
 import type { Exam, Question } from "@/lib/questions/types";
 
 async function getOwnedExamOfQuestion(
@@ -191,10 +192,12 @@ export async function regenerateQuestion(
   settings.questionTypes = [question.type];
   settings.questionCount = 1;
 
+  const credentials = await resolveGroqCredentials(teacherId);
   const replacement = await generateReplacement(
     settings,
     question.type,
-    question
+    question,
+    credentials
   );
   if (!replacement) {
     throw new ApiError(

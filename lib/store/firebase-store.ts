@@ -10,7 +10,7 @@
  */
 import { getAdminDb } from "@/lib/firebase/admin";
 import { randomId } from "@/lib/utils";
-import type { AppStore } from "./types";
+import type { AppStore, GroqSettings } from "./types";
 import type {
   Answer,
   Attempt,
@@ -189,5 +189,30 @@ export class FirebaseStore implements AppStore {
       .limit(1)
       .get();
     return snap.empty ? null : (snap.docs[0].data() as Attempt);
+  }
+
+  /* ---------------- إعدادات Groq اليدوية (BYOK) ---------------- */
+  /*
+   * تُحفظ في مجموعة مستقلة groq_settings/{teacherId} — بعيدًا عن مستند
+   * المعلم — حتى لا يظهر المفتاح في أي استجابة تُرجع كائن المعلم.
+   */
+
+  async getGroqSettings(teacherId: string): Promise<GroqSettings | null> {
+    const snap = await this.db().doc(`groq_settings/${teacherId}`).get();
+    return snap.exists ? (snap.data() as GroqSettings) : null;
+  }
+
+  async saveGroqSettings(
+    teacherId: string,
+    s: GroqSettings
+  ): Promise<GroqSettings> {
+    await this.db()
+      .doc(`groq_settings/${teacherId}`)
+      .set({ ...s, teacherId });
+    return s;
+  }
+
+  async deleteGroqSettings(teacherId: string): Promise<void> {
+    await this.db().doc(`groq_settings/${teacherId}`).delete();
   }
 }

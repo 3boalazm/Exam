@@ -72,3 +72,32 @@ export const authMeSchema = z.object({
   name: z.string().trim().min(2).max(60).optional(),
   email: z.string().trim().max(100).optional(),
 });
+
+/** إعدادات Groq اليدوية: مفتاح (اختياري عند التحديث) + نموذج */
+export const groqSettingsSchema = z.object({
+  apiKey: z
+    .string()
+    .trim()
+    .min(10, "مفتاح Groq غير صالح")
+    .max(200)
+    .regex(/^gsk_[A-Za-z0-9]{8,}$/, "مفتاح Groq يجب أن يبدأ بـ gsk_")
+    .optional(),
+  model: z
+    .string()
+    .trim()
+    .min(2)
+    .max(80)
+    .default("llama-3.3-70b-versatile"),
+});
+
+/** اختبار اتصال Groq — المفتاح/النموذج اختياريان (يُستخدم المحفوظ إن غابا) */
+export const groqTestSchema = z.object({
+  apiKey: z
+    .string()
+    .trim()
+    .min(10)
+    .max(200)
+    .regex(/^gsk_[A-Za-z0-9]{8,}$/, "مفتاح Groq يجب أن يبدأ بـ gsk_")
+    .optional(),
+  model: z.string().trim().min(2).max(80).optional(),
+});

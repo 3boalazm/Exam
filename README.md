@@ -28,6 +28,7 @@
 
 - **طريقتان للتوليد**: اختيار عشوائي سريع من بنك الأسئلة مباشرة (الافتراضي)، أو توليد بالذكاء الاصطناعي عبر Groq.
 - **توليد Groq اختياري** بناءً على بنك أسئلة مرجعي — مع Pipeline تحقق كامل قبل دخول أي سؤال الامتحان.
+- **إعدادات Groq يدوية (BYOK)**: صفحة إعدادات يضيف فيها كل معلم مفتاح Groq الخاص به + النموذج مع زر اختبار اتصال — تُفعّل الذكاء الاصطناعي على الموقع كله وتسبق مفتاح متغيرات البيئة.
 - **4 أنواع أسئلة**: اختيار من متعدد (MCQ)، صح/غلط، توصيل (Matching)، ترتيب (Ordering).
 - **التحكم للمعلم**: المادة، الموضوع، الدرس، أنواع الأسئلة، العدد، الصعوبة.
 - **مراجعة كاملة قبل النشر**: تعديل نص/اختيارات/إجابة/درجة/حل، إعادة توليد سؤال بديل، حذف، إعادة ترتيب، إضافة سؤال يدويًا.
@@ -89,6 +90,9 @@ curl -X POST http://localhost:3000/api/exams/generate \
 
 ### 2) Groq
 - أنشئ مفتاحًا من [Groq Console](https://console.groq.com/keys).
+- **بديل بدون متغيرات بيئة**: يستطيع كل معلم إضافة مفتاحه الخاص من صفحة
+  **الإعدادات** (`⚙️ الإعدادات` في الشريط العلوي) — المفتاح اليدوي يأخذ
+  الأولوية على `GROQ_API_KEY` ويُخزَّن على الخادم فقط (لا يظهر في المتصفح).
 
 ### 3) Vercel
 1. استورد المستودع في Vercel.
@@ -109,7 +113,7 @@ curl -X POST http://localhost:3000/api/exams/generate \
 | `NEXT_PUBLIC_SITE_URL` | عام | رابط الموقع النهائي لإنشاء روابط الامتحان |
 | `DEMO_MODE` | عام (اختياري) | `1` = تجريبي إجباري، `0` = Firebase إجباري، فارغ = تلقائي |
 
-> ⚠️ **الأمان**: `GROQ_API_KEY` و`FIREBASE_SERVICE_ACCOUNT_JSON` يعيشان **على الخادم فقط** ولا يظهران في المتصفح إطلاقًا.
+> ⚠️ **الأمان**: `GROQ_API_KEY` و`FIREBASE_SERVICE_ACCOUNT_JSON` يعيشان **على الخادم فقط** ولا يظهران في المتصفح إطلاقًا. المفتاح اليدوي الذي يضيفه المعلم من صفحة الإعدادات يُحفظ أيضًا على الخادم فقط (مجموعة `groq_settings` منفصلة عن مستند المعلم).
 
 ---
 
@@ -130,6 +134,7 @@ curl -X POST http://localhost:3000/api/exams/generate \
 
 ```
 teachers/{teacherId}      { name, email, createdAt }
+groq_settings/{teacherId} { apiKey, model, updatedAt }   ← مفتاح Groq اليدوي (سرّي، خادم فقط)
 exams/{examId}            { teacherId, title, subject, topic, topics[], subtopic,
                             generationSource(bank|ai), difficulty, questionTypes, questionCount,
                             status(draft|published|closed), code,
@@ -250,6 +255,10 @@ data/
 | `POST` | `/api/questions/reorder` | إعادة ترتيب | معلم |
 | `POST` | `/api/attempts` | تسليم الطالب (تصحيح) | — |
 | `GET` | `/api/attempts/[id]` | تفاصيل محاولة | معلم |
+| `GET` | `/api/settings/groq` | حالة إعداد Groq (مقنّع) | معلم |
+| `PUT` | `/api/settings/groq` | حفظ مفتاح Groq + النموذج | معلم |
+| `DELETE` | `/api/settings/groq` | إزالة المفتاح اليدوي | معلم |
+| `POST` | `/api/settings/groq/test` | اختبار اتصال Groq | معلم |
 
 ---
 

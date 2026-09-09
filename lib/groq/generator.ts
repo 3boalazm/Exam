@@ -6,6 +6,7 @@
 import type { Difficulty, ExamSettings, QuestionType } from "@/lib/questions/types";
 import { TYPE_LABELS } from "@/lib/questions/validator";
 import type { BankQuestion } from "@/lib/bank";
+import { DEFAULT_GROQ_MODEL, type GroqCredentials } from "./settings";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 export const GROQ_REQUEST_TIMEOUT_MS = 45_000;
@@ -122,17 +123,21 @@ ${reference ? `سؤال مرجعي — أنشئ سؤالًا مشابهًا بن
 }
 
 /**
- * استدعاء Groq (OpenAI-compatible) مع response_format json_object
+ * استدعاء Groq (OpenAI-compatible) مع response_format json_object.
+ * عند تمرير credentials (مفتاح المعلم اليدوي) تُستخدم أولًا،
+ * وإلا يُرجع لمتغيرات البيئة.
  */
 export async function callGroqJSON(
   system: string,
   user: string,
   temperature = 0.9,
-  timeoutMs = GROQ_REQUEST_TIMEOUT_MS
+  timeoutMs = GROQ_REQUEST_TIMEOUT_MS,
+  credentials?: GroqCredentials
 ): Promise<unknown> {
-  const key = process.env.GROQ_API_KEY;
+  const key = credentials?.apiKey || process.env.GROQ_API_KEY;
   if (!key) throw new Error("GROQ_API_KEY غير محدد");
-  const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+  const model =
+    credentials?.model || process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
 
   // لا نسمح لأي نداء بتجاوز 45 ثانية. يمكن للمحرك تمرير مهلة أقصر
   // عندما لا يتبقى من ميزانية Vercel الإجمالية سوى بضع ثوانٍ.

@@ -7,6 +7,16 @@ import type {
 } from "@/lib/questions/types";
 
 /**
+ * إعدادات Groq اليدوية للمعلم (BYOK) — تُحفظ على الخادم فقط
+ * في مكان منفصل عن مستند المعلم حتى لا يتسرب المفتاح للمتصفح أبدًا.
+ */
+export interface GroqSettings {
+  apiKey: string;
+  model: string;
+  updatedAt: number;
+}
+
+/**
  * واجهة التخزين الموحدة.
  * - FirebaseStore: Cloud Firestore عبر Admin SDK (الإنتاج)
  * - DemoStore:   تخزين مؤقت محلي (الوضع التجريبي بدون Firebase)
@@ -44,4 +54,9 @@ export interface AppStore {
     examId: string,
     studentPhone: string
   ): Promise<Attempt | null>;
+
+  /* إعدادات Groq اليدوية لكل معلم */
+  getGroqSettings(teacherId: string): Promise<GroqSettings | null>;
+  saveGroqSettings(teacherId: string, s: GroqSettings): Promise<GroqSettings>;
+  deleteGroqSettings(teacherId: string): Promise<void>;
 }
