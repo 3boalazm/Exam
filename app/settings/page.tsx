@@ -59,6 +59,8 @@ export default function SettingsPage() {
     ok: boolean;
     model?: string;
     latencyMs?: number;
+    autoSelected?: boolean;
+    previousModel?: string;
     error?: string;
   } | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
@@ -122,6 +124,8 @@ export default function SettingsPage() {
         ok: boolean;
         model: string;
         latencyMs: number;
+        autoSelected?: boolean;
+        previousModel?: string;
       }>("/api/settings/groq/test", {
         method: "POST",
         body: {
@@ -133,7 +137,13 @@ export default function SettingsPage() {
         ok: true,
         model: res.model,
         latencyMs: res.latencyMs,
+        autoSelected: res.autoSelected,
+        previousModel: res.previousModel,
       });
+      // إن اختير النموذج تلقائيًا (القديم محذوف) نعبّئ الحقل بالنموذج الصالح
+      if (res.autoSelected && res.model) {
+        setModel(res.model);
+      }
     } catch (err) {
       setTestResult({ ok: false, error: (err as Error).message });
     }
@@ -330,7 +340,9 @@ export default function SettingsPage() {
             {testResult && (
               <Alert tone={testResult.ok ? "success" : "error"}>
                 {testResult.ok
-                  ? `✅ تم الاتصال بـ Groq بنجاح — النموذج: ${testResult.model} — خلال ${testResult.latencyMs}ms`
+                  ? testResult.autoSelected
+                    ? `✅ تم الاتصال بنجاح — النموذج السابق (${testResult.previousModel}) غير متوفر، فتم اختيار ${testResult.model} تلقائيًا — احفظ الإعدادات لاعتماده (خلال ${testResult.latencyMs}ms)`
+                    : `✅ تم الاتصال بـ Groq بنجاح — النموذج: ${testResult.model} — خلال ${testResult.latencyMs}ms`
                   : testResult.error}
               </Alert>
             )}

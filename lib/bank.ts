@@ -4,7 +4,7 @@
  * لاحقًا ينتقل إلى Firestore ليديره المعلم من الـDashboard.
  */
 import bankData from "@/data/mathematics.json";
-import { normalizeText, seededShuffle } from "@/lib/utils";
+import { normalizeText, randomShuffle } from "@/lib/utils";
 import type { Difficulty, QuestionData, QuestionType } from "@/lib/questions/types";
 
 export interface BankTopic {
@@ -82,10 +82,7 @@ export function findBankQuestions(opts: BankQuery): BankQuestion[] {
     (q) => !exclude.has(normalizeText(q.question)) && !excludeIds.has(q.id)
   );
 
-  const topicSeed = opts.topics?.join(",") ?? opts.topic;
-  const shuffled = seededShuffle(
-    qs,
-    `${topicSeed}-${opts.type}-${Date.now()}-${Math.random()}`
-  );
+  // خلط عشوائي حقيقي: نفس الاستعلام يُرجع ترتيبًا مختلفًا في كل اختبار
+  const shuffled = randomShuffle(qs);
   return opts.limit ? shuffled.slice(0, opts.limit) : shuffled;
 }

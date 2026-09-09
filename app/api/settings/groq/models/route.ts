@@ -2,17 +2,12 @@ import { apiHandler } from "@/lib/api";
 import { ApiError } from "@/lib/utils";
 import {
   GroqError,
+  isChatModelId,
   listGroqModels,
-  type GroqModelInfo,
 } from "@/lib/groq/generator";
 import { resolveGroqCredentials } from "@/lib/groq/settings";
 
 export const runtime = "nodejs";
-
-/** استبعاد النماذج غير الصالحة لتوليد النصوص (صوت/حماية/تضمين) */
-function isChatModel(m: GroqModelInfo): boolean {
-  return !/whisper|tts|guard|embedding|rerank|moderation|distil/i.test(m.id);
-}
 
 /**
  * قائمة النماذج المتاحة فعليًا على Groq لمفتاح المعلم.
@@ -29,10 +24,11 @@ export const GET = apiHandler(async (_req, { teacher }) => {
 
   try {
     const models = await listGroqModels(creds);
-    const chat = models
-      .filter(isChatModel)
-      .sort((a, b) => Number(b.active) - Number(a.active));
-    return { models: chat, total: models.length };
+    const chatIds = models
+      .filter((m) => isChatModelId(m.id))
+      .sort((a, b) => Number(b.active) - Number(a.active))
+      .map((m) => m.id);
+    return { models: chatIds, total: models.length };
   } catch (e) {
     const g = e instanceof GroqError ? e : null;
     switch (g?.kind) {

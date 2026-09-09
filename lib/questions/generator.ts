@@ -11,7 +11,9 @@ import {
   buildSinglePrompt,
   callGroqJSON,
   extractQuestionsArray,
+  GroqError,
   GROQ_REQUEST_TIMEOUT_MS,
+  resolveAvailableModel,
 } from "@/lib/groq/generator";
 import { envGroqCredentials, type GroqCredentials } from "@/lib/groq/settings";
 import { validateQuestion } from "./validator";
@@ -112,6 +114,43 @@ function bankToQuestion(b: BankQuestion): GeneratedQuestion {
   };
 }
 
+export interface GenerateOptions {
+  /** أسئلة بنك مستخدمة في اختبارات سابقة لنفس الدرس — تُستبعد لضمان التنوع */
+  excludeBankIds?: string[];
+}
+
+/**
+ * استدعاء Groq مع إصلاح ذاتي للنموذج: إذا كان النموذج المحفوظ غير متوفر
+ * (نماذج Groq تُحذف وتتبدل باستمرار) ننتقل تلقائيًا لأول نموذج متاح.
+ */
+async function callGroqWithHeal(
+  creds: GroqCredentials,
+  system: string,
+  user: string,
+  temperature: number,
+  timeoutMs: number,
+  onHeal?: (newModel: string) => void
+): Promise<unknown> {
+  try {
+    return await callGroqJSON(system, user, temperature, timeoutMs, creds);
+  } catch (e) {
+    if (e instanceof GroqError && e.kind === "not_found") {
+      const alt = await resolveAvailableModel(creds);
+      if (alt && alt !== creds.model) {
+        onHeal?.(alt);
+        return await callGroqJSON(
+          system,
+          user,
+          temperature,
+          timeoutMs,
+          { ...creds, model: alt }
+        );
+      }
+    }
+    throw e;
+  }
+}
+
 /**
  * توليد الأسئلة الرئيسية — تُستدعى من GenerationService.
  * credentials: اعتمادات Groq للمعلم (المفتاح اليدوي أولًا ثم متغيرات البيئة).
@@ -119,11 +158,13 @@ function bankToQuestion(b: BankQuestion): GeneratedQuestion {
 export async function generateQuestions(
   settings: ExamSettings,
   existing: Question[] = [],
-  credentials?: GroqCredentials | null
+  credentials?: GroqCredentials | null,
+  options: GenerateOptions = {}
 ): Promise<GenerationResult> {
   const requestedSource = settings.generationSource ?? "bank";
   const creds = credentials ?? envGroqCredentials();
   const useAI = requestedSource === "ai" && Boolean(creds?.apiKey);
+  const excludeBankIds = options.excludeBankIds ?? [];
   const topics = selectedTopics(settings);
   const slots = allocateTypes(settings.questionTypes, settings.questionCount);
   const perType: Partial<Record<QuestionType, number>> = {};
@@ -149,24 +190,43 @@ export async function generateQuestions(
 
     for (let i = 0; i < slots.length; i++) {
       const type = slots[i];
-      let candidates = findBankQuestions({
+      const base = {
         subject: settings.subject,
         topics,
         subtopic: topics.length === 1 ? settings.subtopic : undefined,
+      };
+
+      // نستبعد أسئلة الاختبارات السابقة لنفس الدرس (تنوّع)، مع استبعاد
+      // ما اختير داخل نفس الاختبار الحالي.
+      let candidates = findBankQuestions({
+        ...base,
         type,
         excludeTexts: [...usedTexts],
+        excludeIds: excludeBankIds,
       });
 
       // بعض بنوك البيانات (ومنها البنك الحقيقي الحالي) تحتوي MCQ فقط.
       // بدل إرجاع امتحان ناقص، نكمل بأي نوع متاح من نفس الوحدات المختارة.
       if (!candidates.length) {
         candidates = findBankQuestions({
-          subject: settings.subject,
-          topics,
-          subtopic: topics.length === 1 ? settings.subtopic : undefined,
+          ...base,
           excludeTexts: [...usedTexts],
+          excludeIds: excludeBankIds,
         });
         if (candidates.length) usedAvailableTypeFallback = true;
+      }
+
+      // إن نفدت الأسئلة بسبب استبعاد أسئلة الاختبارات السابقة، نتراجع عن
+      // هذا الاستبعاد حتى لا يفشل التوليد (الأولوية لإكمال العدد).
+      if (!candidates.length && excludeBankIds.length) {
+        candidates = findBankQuestions({
+          ...base,
+          type,
+          excludeTexts: [...usedTexts],
+        });
+        if (!candidates.length) {
+          candidates = findBankQuestions({ ...base, excludeTexts: [...usedTexts] });
+        }
       }
       if (!candidates.length) continue;
 
@@ -203,6 +263,11 @@ export async function generateQuestions(
         "بعض أنواع الأسئلة المطلوبة غير موجودة في البنك؛ تم الاستكمال بأنواع متاحة من الوحدات المختارة"
       );
     }
+    if (excludeBankIds.length) {
+      warnings.push(
+        "تم استبعاد الأسئلة المستخدمة في اختباراتك السابقة لنفس الدرس لضمان تنوّع جديد"
+      );
+    }
     if (questions.length < slots.length) {
       warnings.push(
         `تم التوليد ${questions.length} من ${slots.length} (المحتوى المرجعي غير كافٍ لهذا العدد)`
@@ -222,18 +287,24 @@ export async function generateQuestions(
   const refs = findReferenceQuestions(settings);
   const deadline = Date.now() + GENERATION_BUDGET_MS;
   let budgetExceeded = false;
+  const groqCreds = creds as GroqCredentials; // مضمون في وضع AI (apiKey متوفر)
+  let healedModel: string | null = null;
+  const onHeal = (m: string) => {
+    if (!healedModel) healedModel = m;
+  };
 
   const results: (GeneratedQuestion | null)[] = new Array(slots.length).fill(null);
 
   // 1) محاولة دفعة كاملة
   const batch = buildBatchPrompt(settings, refs, perType);
   try {
-    const data = await callGroqJSON(
+    const data = await callGroqWithHeal(
+      groqCreds,
       batch.system,
       batch.user,
       0.9,
       Math.min(GROQ_REQUEST_TIMEOUT_MS, Math.max(1, deadline - Date.now())),
-      creds ?? undefined
+      onHeal
     );
     const pool = extractQuestionsArray(data);
     const remaining = [...pool];
@@ -266,12 +337,13 @@ export async function generateQuestions(
       attempts++;
       const single = buildSinglePrompt(settings, slots[i]);
       try {
-        const data = await callGroqJSON(
+        const data = await callGroqWithHeal(
+          groqCreds,
           single.system,
           single.user,
           1.0,
           Math.min(GROQ_REQUEST_TIMEOUT_MS, remainingMs),
-          creds ?? undefined
+          onHeal
         );
         const arr = extractQuestionsArray(data);
         results[i] = arr.length
@@ -298,6 +370,11 @@ export async function generateQuestions(
   if (budgetExceeded) {
     warnings.push(
       "توقفت محاولات الإعادة بعد بلوغ مهلة التوليد (50 ثانية)، وتم الاحتفاظ بالأسئلة التي تولدت بنجاح"
+    );
+  }
+  if (healedModel) {
+    warnings.push(
+      `النموذج المحدد غير متوفر على Groq؛ تم التحويل تلقائيًا إلى ${healedModel}`
     );
   }
   if (questions.length < slots.length) {
@@ -337,17 +414,18 @@ export async function generateReplacement(
   const single = buildSinglePrompt(settings, type, {
     question: original.question,
   });
+  const groqCreds = creds as GroqCredentials; // مضمون في وضع AI
   const deadline = Date.now() + GENERATION_BUDGET_MS;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) break;
     try {
-      const data = await callGroqJSON(
+      const data = await callGroqWithHeal(
+        groqCreds,
         single.system,
         single.user,
         1.0,
-        Math.min(GROQ_REQUEST_TIMEOUT_MS, remainingMs),
-        creds ?? undefined
+        Math.min(GROQ_REQUEST_TIMEOUT_MS, remainingMs)
       );
       const arr = extractQuestionsArray(data);
       if (arr.length) {

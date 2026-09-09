@@ -1,6 +1,10 @@
 import { apiHandler } from "@/lib/api";
 import { ApiError } from "@/lib/utils";
-import { callGroqJSON, GroqError } from "@/lib/groq/generator";
+import {
+  callGroqJSON,
+  GroqError,
+  resolveAvailableModel,
+} from "@/lib/groq/generator";
 import {
   DEFAULT_GROQ_MODEL,
   resolveGroqCredentials,
@@ -12,8 +16,8 @@ export const runtime = "nodejs";
  * اختبار اتصال Groq (زر «اختبار الاتصال»):
  * - إن كتب المعلم مفتاحًا/نموذجًا في الطلب تُستخدم (تجربة قبل الحفظ)
  * - وإلا يُستخدم الإعداد اليدوي المحفوظ ثم متغيرات البيئة
- *
- * نصيحة: لا نرفض المفتاح شكلًا — Groq هو من يقرر صحة المفتاح.
+ * - إن كان النموذج غير متوفر (نماذج Groq تُحذف باستمرار) نختار تلقائيًا
+ *   أول نموذج متاح ونعيد الاختبار به — فينجح الاتصال ويظهر النموذج الصالح.
  */
 export const POST = apiHandler(async (req, { teacher }) => {
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -55,8 +59,37 @@ export const POST = apiHandler(async (req, { teacher }) => {
     );
     return { ok: true, model: finalModel, latencyMs: Date.now() - started };
   } catch (e) {
-    console.error("[groq-test] failed", e);
     const g = e instanceof GroqError ? e : null;
+
+    // إصلاح ذاتي: نموذج غير متوفر → اختيار أول نموذج متاح وإعادة الاختبار
+    if (g?.kind === "not_found") {
+      const alt = await resolveAvailableModel({
+        apiKey,
+        model: finalModel,
+        source: "manual",
+      });
+      if (alt && alt !== finalModel) {
+        try {
+          await callGroqJSON(
+            "أنت أداة فحص اتصال. أجب بـ JSON فقط دون أي نص إضافي.",
+            'أعد الكائن التالي حرفيًا: {"ok": true}',
+            0,
+            15_000,
+            { apiKey, model: alt, source: "manual" }
+          );
+          return {
+            ok: true,
+            model: alt,
+            latencyMs: Date.now() - started,
+            autoSelected: true,
+            previousModel: finalModel,
+          };
+        } catch {
+          // نكمل لمسار الخطأ العام
+        }
+      }
+    }
+
     switch (g?.kind) {
       case "auth":
         throw new ApiError(

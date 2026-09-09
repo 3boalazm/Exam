@@ -20,6 +20,33 @@ export interface GeneratedExamResult {
 }
 
 /**
+ * يجمع معرّفات أسئلة البنك المستخدمة في اختبارات المعلم السابقة
+ * لنفس الوحدات — لتُستبعد من التوليد الجديد فيتغير محتوى كل اختبار.
+ */
+async function collectUsedBankIds(
+  teacherId: string,
+  settings: ExamSettings
+): Promise<string[]> {
+  const store = getStore();
+  const topics = new Set(
+    settings.topics?.length ? settings.topics : [settings.topic]
+  );
+  const exams = (await store.listExams(teacherId))
+    .filter((e) => (e.topics ?? [e.topic]).some((t) => topics.has(t)))
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 20);
+
+  const ids = new Set<string>();
+  for (const exam of exams) {
+    const questions = await store.listQuestions(exam.id);
+    for (const q of questions) {
+      if (q.bankId) ids.add(q.bankId);
+    }
+  }
+  return [...ids];
+}
+
+/**
  * توليد امتحان كامل:
  * 1) إنشاء مسودة
  * 2) توليد الأسئلة عبر المحرك (Groq + Bank + Validators + Retry)
@@ -36,7 +63,10 @@ export async function generateExam(
   let generated: Awaited<ReturnType<typeof generateQuestions>>["questions"] = [];
   try {
     const credentials = await resolveGroqCredentials(teacher.id);
-    const result = await generateQuestions(settings, [], credentials);
+    const excludeBankIds = await collectUsedBankIds(teacher.id, settings);
+    const result = await generateQuestions(settings, [], credentials, {
+      excludeBankIds,
+    });
     generated = result.questions;
     warnings = result.warnings;
   } catch (e) {

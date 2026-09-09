@@ -102,6 +102,47 @@ export async function listGroqModels(
   }
 }
 
+/** هل معرّف النموذج صالح لتوليد النصوص (يستبعد الصوت/الحماية/التضمين) */
+export function isChatModelId(id: string): boolean {
+  return !/whisper|tts|guard|embedding|rerank|moderation|distil|prompt-guard/i.test(
+    id
+  );
+}
+
+/** اختيار أفضل نموذج شات متاح من قائمة نماذج Groq */
+export function pickBestModel(models: GroqModelInfo[]): GroqModelInfo | null {
+  const active = models.filter((m) => m.active && isChatModelId(m.id));
+  if (!active.length) return null;
+  const find = (re: RegExp) => active.find((m) => re.test(m.id));
+  return (
+    find(/llama-4/i) ??
+    find(/qwen3/i) ??
+    find(/llama-3\.3/i) ??
+    find(/llama-3\.1/i) ??
+    find(/gpt-oss/i) ??
+    find(/kimi/i) ??
+    find(/llama/i) ??
+    find(/qwen/i) ??
+    active[0]
+  );
+}
+
+/**
+ * إصلاح ذاتي للنموذج: يجلب قائمة النماذج الحيّة ويختار نموذجًا متاحًا —
+ * يُستخدم عندما يفشل نموذج محفوظ قديم (مثل llama-3.3-70b-versatile المحذوف).
+ */
+export async function resolveAvailableModel(
+  credentials: GroqCredentials,
+  timeoutMs = 12_000
+): Promise<string | null> {
+  try {
+    const models = await listGroqModels(credentials, timeoutMs);
+    return pickBestModel(models)?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export interface PromptParts {
   system: string;
   user: string;
