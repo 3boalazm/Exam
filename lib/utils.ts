@@ -21,6 +21,7 @@ export function randomId(prefix = ""): string {
 export function generateExamCode(subject: string): string {
   const prefixes: Record<string, string> = {
     "رياضيات": "MATH",
+    "الرياضيات": "MATH",
     "علوم": "SCI",
     "فيزياء": "PHY",
     "كيمياء": "CHEM",

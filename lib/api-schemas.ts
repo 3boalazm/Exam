@@ -14,6 +14,7 @@ export const generateExamSchema = z.object({
     .min(1)
     .max(10)
     .refine((v) => new Set(v).size === v.length, "الوحدات يجب أن تكون مختلفة"),
+  generationSource: z.enum(["bank", "ai"]).default("bank"),
   subtopic: z.string().trim().max(60).optional().nullable(),
   questionTypes: z
     .array(questionTypeSchema)

@@ -19,6 +19,13 @@ import type {
   Teacher,
 } from "@/lib/questions/types";
 
+/** Firestore يرفض أي حقل top-level قيمته undefined. */
+function omitUndefined<T extends object>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, item]) => item !== undefined)
+  ) as T;
+}
+
 export class FirebaseStore implements AppStore {
   private db() {
     return getAdminDb();
@@ -68,12 +75,12 @@ export class FirebaseStore implements AppStore {
   }
 
   async createExam(e: Exam): Promise<Exam> {
-    await this.db().doc(`exams/${e.id}`).set(e);
+    await this.db().doc(`exams/${e.id}`).set(omitUndefined(e));
     return e;
   }
 
   async updateExam(id: string, patch: Partial<Exam>): Promise<Exam> {
-    await this.db().doc(`exams/${id}`).update({ ...patch });
+    await this.db().doc(`exams/${id}`).update(omitUndefined(patch));
     return (await this.getExam(id)) as Exam;
   }
 
@@ -114,12 +121,12 @@ export class FirebaseStore implements AppStore {
   }
 
   async createQuestion(q: Question): Promise<Question> {
-    await this.db().doc(`questions/${q.id}`).set(q);
+    await this.db().doc(`questions/${q.id}`).set(omitUndefined(q));
     return q;
   }
 
   async updateQuestion(id: string, patch: Partial<Question>): Promise<Question> {
-    await this.db().doc(`questions/${id}`).update({ ...patch });
+    await this.db().doc(`questions/${id}`).update(omitUndefined(patch));
     return (await this.getQuestion(id)) as Question;
   }
 

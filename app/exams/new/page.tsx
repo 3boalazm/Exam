@@ -9,21 +9,24 @@ import {
   Card,
   Field,
   Input,
-  PageLoader,
   Select,
   Spinner,
 } from "@/components/ui";
 import { apiFetch, useTeacher } from "@/lib/client";
 import { TYPE_LABELS, QUESTION_TYPES } from "@/lib/questions/validator";
-import type { Difficulty, QuestionType } from "@/lib/questions/types";
+import type {
+  Difficulty,
+  GenerationSource,
+  QuestionType,
+} from "@/lib/questions/types";
 
 const GENERATING_STEPS = [
   "جارٍ تجهيز الإعدادات...",
-  "بناء البرومبت مع بنك الأسئلة المرجعي...",
-  "Groq يولّد الأسئلة...",
-  "التحقق من صحة كل سؤال (Zod + Math)...",
+  "قراءة بنك الأسئلة والوحدات المختارة...",
+  "اختيار الأسئلة وتوزيعها...",
+  "التحقق من صحة كل سؤال...",
   "فحص التكرار...",
-  "الحفظ في Firestore...",
+  "الحفظ في قاعدة البيانات...",
 ];
 
 export default function NewExamPage() {
@@ -33,7 +36,9 @@ export default function NewExamPage() {
   const [topics, setTopics] = useState<string[]>([]);
   const [subtopic, setSubtopic] = useState("");
   const [title, setTitle] = useState("");
-  const [types, setTypes] = useState<QuestionType[]>(["MCQ", "TRUE_FALSE"]);
+  const [generationSource, setGenerationSource] =
+    useState<GenerationSource>("bank");
+  const [types, setTypes] = useState<QuestionType[]>(["MCQ"]);
   const [difficulty, setDifficulty] = useState<Difficulty>("mixed");
   const [count, setCount] = useState(10);
   const [busy, setBusy] = useState(false);
@@ -99,6 +104,7 @@ export default function NewExamPage() {
           title: title.trim() || `اختبار ${topics[0]}`,
           subject,
           topics,
+          generationSource,
           subtopic: topics.length === 1 ? subtopic || undefined : undefined,
           questionTypes: types,
           difficulty,
@@ -123,7 +129,9 @@ export default function NewExamPage() {
             </div>
             <div className="text-sm text-slate-500">{GENERATING_STEPS[stepIdx]}</div>
             <div className="text-xs text-slate-400">
-              قد يستغرق من 10 إلى 60 ثانية حسب عدد الأسئلة
+              {generationSource === "bank"
+                ? "يتم الاختيار مباشرة من بنك الأسئلة"
+                : "قد يستغرق حتى 50 ثانية حسب عدد الأسئلة"}
             </div>
           </div>
         </Card>
@@ -202,7 +210,59 @@ export default function NewExamPage() {
             </div>
           </Card>
 
-          <Card title="2) أنواع الأسئلة">
+          <Card title="2) طريقة التوليد">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label
+                className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-4 transition-colors ${
+                  generationSource === "bank"
+                    ? "border-indigo-400 bg-indigo-50"
+                    : "border-slate-200 bg-white hover:border-slate-300"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="generation-source"
+                  checked={generationSource === "bank"}
+                  onChange={() => setGenerationSource("bank")}
+                  className="mt-1 h-5 w-5 accent-indigo-600"
+                />
+                <span>
+                  <span className="block font-bold text-slate-800">
+                    عشوائي من بنك الأسئلة
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">
+                    الأسرع والأكثر ثباتًا — يختار من الداتا مباشرة بدون Groq.
+                  </span>
+                </span>
+              </label>
+
+              <label
+                className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-4 transition-colors ${
+                  generationSource === "ai"
+                    ? "border-indigo-400 bg-indigo-50"
+                    : "border-slate-200 bg-white hover:border-slate-300"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="generation-source"
+                  checked={generationSource === "ai"}
+                  onChange={() => setGenerationSource("ai")}
+                  className="mt-1 h-5 w-5 accent-indigo-600"
+                />
+                <span>
+                  <span className="block font-bold text-slate-800">
+                    توليد بالذكاء الاصطناعي
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">
+                    يستخدم Groq، وقد يستغرق وقتًا أطول حسب الاتصال.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </Card>
+
+          <Card title="3) أنواع الأسئلة">
             <div className="grid gap-3 sm:grid-cols-2">
               {QUESTION_TYPES.map((t) => (
                 <label
@@ -226,7 +286,7 @@ export default function NewExamPage() {
             </div>
           </Card>
 
-          <Card title="3) الإعدادات">
+          <Card title="4) الإعدادات">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="الصعوبة">
                 <Select

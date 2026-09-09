@@ -60,7 +60,7 @@ export interface BankQuery {
   excludeIds?: string[];
 }
 
-/** بحث في بنك الأسئلة مع خلط حتمي */
+/** بحث في بنك الأسئلة مع خلط عشوائي للنتائج */
 export function findBankQuestions(opts: BankQuery): BankQuestion[] {
   const exclude = new Set((opts.excludeTexts ?? []).map(normalizeText));
   const excludeIds = new Set(opts.excludeIds ?? []);
@@ -83,6 +83,9 @@ export function findBankQuestions(opts: BankQuery): BankQuestion[] {
   );
 
   const topicSeed = opts.topics?.join(",") ?? opts.topic;
-  const shuffled = seededShuffle(qs, `${topicSeed}-${opts.type}-${Date.now() % 1000}`);
+  const shuffled = seededShuffle(
+    qs,
+    `${topicSeed}-${opts.type}-${Date.now()}-${Math.random()}`
+  );
   return opts.limit ? shuffled.slice(0, opts.limit) : shuffled;
 }

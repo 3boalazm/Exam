@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 /**
  * توليد امتحان كامل:
- * Teacher Settings → Groq → Parse → Zod → Validators → Math → Duplicates → Firestore
+ * Teacher Settings → Bank أو Groq → Validators → Duplicates → Firestore
  */
 export const POST = apiHandler(async (req, { teacher }) => {
   const body = await req.json().catch(() => null);

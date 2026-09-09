@@ -23,6 +23,7 @@ export async function createDraftExam(
     // topic يظل أول وحدة للتوافق مع الامتحانات والعملاء القدامى.
     topic: settings.topics[0] ?? settings.topic,
     topics: settings.topics,
+    generationSource: settings.generationSource,
     ...(settings.subtopic ? { subtopic: settings.subtopic } : {}),
     difficulty: settings.difficulty,
     questionTypes: settings.questionTypes,
@@ -125,6 +126,7 @@ export function settingsFromExam(exam: Exam): ExamSettings {
     subject: exam.subject,
     topic: topics[0] ?? exam.topic,
     topics,
+    generationSource: exam.generationSource ?? "bank",
     subtopic: exam.subtopic,
     questionTypes: exam.questionTypes,
     difficulty: exam.difficulty,

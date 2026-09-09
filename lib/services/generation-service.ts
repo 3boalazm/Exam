@@ -1,7 +1,6 @@
 /**
- * GenerationService — يتعامل مع Groq والـ Pipeline الكامل:
- * Teacher Settings → Build Prompt → Groq → Parse JSON → Zod/Validators
- * → Math Check → Duplicate Check → Firestore
+ * GenerationService — يدير Pipeline التوليد من البنك أو Groq:
+ * Teacher Settings → Bank/Groq → Zod/Validators → Duplicate Check → Firestore
  */
 import { getStore } from "@/lib/store";
 import { randomId } from "@/lib/utils";

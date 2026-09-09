@@ -7,6 +7,8 @@ export type Difficulty = "easy" | "medium" | "hard" | "mixed";
 
 export type ExamStatus = "draft" | "published" | "closed";
 
+export type GenerationSource = "bank" | "ai";
+
 /* ---------- بيانات السؤال حسب النوع ---------- */
 
 export interface MCQData {
@@ -73,6 +75,8 @@ export interface Exam {
   topic: string;
   /** الوحدات المختارة (اختياري لأن الامتحانات القديمة لا تحتوي عليه) */
   topics?: string[];
+  /** مصدر التوليد (اختياري لأن الامتحانات القديمة لا تحتوي عليه) */
+  generationSource?: GenerationSource;
   subtopic?: string;
   difficulty: Difficulty;
   questionTypes: QuestionType[];
@@ -154,6 +158,7 @@ export interface ExamSettings {
   /** أول وحدة مختارة — للتوافق مع مسار التوليد القديم */
   topic: string;
   topics: string[];
+  generationSource: GenerationSource;
   subtopic?: string;
   questionTypes: QuestionType[];
   difficulty: Difficulty;

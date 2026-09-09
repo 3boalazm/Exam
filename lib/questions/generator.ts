@@ -118,7 +118,8 @@ export async function generateQuestions(
   settings: ExamSettings,
   existing: Question[] = []
 ): Promise<GenerationResult> {
-  const useAI = Boolean(process.env.GROQ_API_KEY);
+  const requestedSource = settings.generationSource ?? "bank";
+  const useAI = requestedSource === "ai" && Boolean(process.env.GROQ_API_KEY);
   const topics = selectedTopics(settings);
   const slots = allocateTypes(settings.questionTypes, settings.questionCount);
   const perType: Partial<Record<QuestionType, number>> = {};
@@ -129,9 +130,10 @@ export async function generateQuestions(
   );
   const warnings: string[] = [];
 
-  /* ---------- الوضع التجريبي / بدون مفتاح Groq: من بنك الأسئلة ---------- */
+  /* ---------- الاختيار المباشر من البنك (الافتراضي أو fallback) ---------- */
   if (!useAI) {
     const questions: GeneratedQuestion[] = [];
+    let usedAvailableTypeFallback = false;
     const pickedPerTopic = new Map(topics.map((topic) => [topic, 0]));
     const targetPerTopic = new Map(
       topics.map((topic, index) => [
@@ -143,13 +145,25 @@ export async function generateQuestions(
 
     for (let i = 0; i < slots.length; i++) {
       const type = slots[i];
-      const candidates = findBankQuestions({
+      let candidates = findBankQuestions({
         subject: settings.subject,
         topics,
         subtopic: topics.length === 1 ? settings.subtopic : undefined,
         type,
         excludeTexts: [...usedTexts],
       });
+
+      // بعض بنوك البيانات (ومنها البنك الحقيقي الحالي) تحتوي MCQ فقط.
+      // بدل إرجاع امتحان ناقص، نكمل بأي نوع متاح من نفس الوحدات المختارة.
+      if (!candidates.length) {
+        candidates = findBankQuestions({
+          subject: settings.subject,
+          topics,
+          subtopic: topics.length === 1 ? settings.subtopic : undefined,
+          excludeTexts: [...usedTexts],
+        });
+        if (candidates.length) usedAvailableTypeFallback = true;
+      }
       if (!candidates.length) continue;
 
       // كل خانة تبدأ بوحدة مختلفة، ثم تنتقل للوحدة التالية فقط إذا نفدت
@@ -180,12 +194,21 @@ export async function generateQuestions(
       usedTexts.add(normalizeText(q.question));
       questions.push(q);
     }
+    if (usedAvailableTypeFallback) {
+      warnings.push(
+        "بعض أنواع الأسئلة المطلوبة غير موجودة في البنك؛ تم الاستكمال بأنواع متاحة من الوحدات المختارة"
+      );
+    }
     if (questions.length < slots.length) {
       warnings.push(
         `تم التوليد ${questions.length} من ${slots.length} (المحتوى المرجعي غير كافٍ لهذا العدد)`
       );
     }
-    warnings.push("وضع تجريبي: تم التوليد من بنك الأسئلة المحلي بدون AI");
+    if (requestedSource === "ai" && !process.env.GROQ_API_KEY) {
+      warnings.push("مفتاح Groq غير متاح؛ تم استخدام بنك الأسئلة بدلًا منه");
+    } else {
+      warnings.push("تم اختيار الأسئلة عشوائيًا من بنك الأسئلة مباشرة");
+    }
     return { questions, warnings, source: "bank" };
   }
 
@@ -284,8 +307,10 @@ export async function generateReplacement(
   original: Question
 ): Promise<GeneratedQuestion | null> {
   const topics = selectedTopics(settings);
-  if (!process.env.GROQ_API_KEY) {
-    // الوضع التجريبي: البديل يظل داخل اتحاد الوحدات المختارة.
+  const useAI =
+    settings.generationSource === "ai" && Boolean(process.env.GROQ_API_KEY);
+  if (!useAI) {
+    // وضع البنك: البديل يظل داخل اتحاد الوحدات المختارة.
     const alt = findBankQuestions({
       subject: settings.subject,
       topics,
