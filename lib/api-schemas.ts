@@ -91,5 +91,5 @@ export const groqSettingsSchema = z.object({
     .trim()
     .min(2)
     .max(80)
-    .default("llama-3.3-70b-versatile"),
+    .default("qwen/qwen3-32b"),
 });

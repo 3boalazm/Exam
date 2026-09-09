@@ -109,7 +109,7 @@ curl -X POST http://localhost:3000/api/exams/generate \
 | `NEXT_PUBLIC_FIREBASE_APP_ID` | عام | من إعدادات Web App |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | **سرّي** | ملف الـ Service Account كاملًا كسلسلة JSON (لـ Admin SDK) |
 | `GROQ_API_KEY` | **سرّي** | مفتاح Groq |
-| `GROQ_MODEL` | عام (اختياري) | نموذج Groq — الافتراضي `llama-3.3-70b-versatile` |
+| `GROQ_MODEL` | عام (اختياري) | نموذج Groq — الافتراضي `qwen/qwen3-32b` (يمكن لكل معلم اختيار نموذج من القائمة الحيّة في صفحة الإعدادات) |
 | `NEXT_PUBLIC_SITE_URL` | عام | رابط الموقع النهائي لإنشاء روابط الامتحان |
 | `DEMO_MODE` | عام (اختياري) | `1` = تجريبي إجباري، `0` = Firebase إجباري، فارغ = تلقائي |
 

@@ -71,7 +71,7 @@ export const POST = apiHandler(async (req, { teacher }) => {
       case "not_found":
         throw new ApiError(
           400,
-          `النموذج غير متوفر: "${finalModel}" — جرّب نموذجًا آخر مثل llama-3.3-70b-versatile`
+          `النموذج غير متوفر: "${finalModel}" — حمّل قائمة النماذج المتاحة من زر «تحميل النماذج» واختر نموذجًا فعّالًا`
         );
       case "timeout":
         throw new ApiError(504, "انتهت مهلة الاتصال بـ Groq — حاول مرة أخرى");

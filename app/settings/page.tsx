@@ -14,20 +14,19 @@ import {
 } from "@/components/ui";
 import { apiFetch, useTeacher } from "@/lib/client";
 
-/** النماذج الشائعة في Groq — تُعرض كاقتراحات مع إمكانية كتابة أي نموذج */
+/** اقتراحات أولية فقط — القائمة الحقيقية تُجلب من Groq بزر «تحميل النماذج» */
 const GROQ_MODELS = [
-  "llama-3.3-70b-versatile",
+  "qwen/qwen3-32b",
   "llama-3.1-8b-instant",
   "meta-llama/llama-4-scout-17b-16e-instruct",
   "meta-llama/llama-4-maverick-17b-128e-instruct",
-  "qwen/qwen3-32b",
   "moonshotai/kimi-k2-instruct-0905",
   "openai/gpt-oss-120b",
   "openai/gpt-oss-20b",
   "groq/compound-mini",
 ];
 
-const DEFAULT_MODEL = "llama-3.3-70b-versatile";
+const DEFAULT_MODEL = "qwen/qwen3-32b";
 
 interface GroqStatus {
   hasManualKey: boolean;
@@ -62,6 +61,8 @@ export default function SettingsPage() {
     latencyMs?: number;
     error?: string;
   } | null>(null);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -137,6 +138,24 @@ export default function SettingsPage() {
       setTestResult({ ok: false, error: (err as Error).message });
     }
     setTesting(false);
+  }
+
+  async function handleLoadModels() {
+    setError("");
+    setNotice("");
+    setLoadingModels(true);
+    try {
+      const res = await apiFetch<{ models: string[] }>(
+        "/api/settings/groq/models"
+      );
+      setAvailableModels(res.models ?? []);
+      if (!(res.models ?? []).length) {
+        setError("لم يُرجع Groq أي نماذج متاحة");
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    }
+    setLoadingModels(false);
   }
 
   async function handleRemove() {
@@ -224,21 +243,60 @@ export default function SettingsPage() {
 
                   <Field
                     label="النموذج (Model)"
-                    hint="اختر من القائمة أو اكتب اسم النموذج يدويًا"
+                    hint="اكتب اسم النموذج، أو حمّل القائمة الحيّة من Groq واختر منها"
                   >
-                    <Input
-                      dir="ltr"
-                      list="groq-models"
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
-                      placeholder={DEFAULT_MODEL}
-                      spellCheck={false}
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        dir="ltr"
+                        list="groq-models"
+                        value={model}
+                        onChange={(e) => setModel(e.target.value)}
+                        placeholder={DEFAULT_MODEL}
+                        spellCheck={false}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        loading={loadingModels}
+                        onClick={handleLoadModels}
+                        className="shrink-0"
+                      >
+                        🔄 تحميل النماذج
+                      </Button>
+                    </div>
                     <datalist id="groq-models">
-                      {GROQ_MODELS.map((m) => (
+                      {(availableModels.length
+                        ? availableModels
+                        : GROQ_MODELS
+                      ).map((m) => (
                         <option key={m} value={m} />
                       ))}
                     </datalist>
+                    {availableModels.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {availableModels.map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setModel(m)}
+                            className={`rounded-lg border px-2 py-1 text-xs font-semibold transition-colors ${
+                              model === m
+                                ? "border-indigo-400 bg-indigo-50 text-indigo-700"
+                                : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300"
+                            }`}
+                            dir="ltr"
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {loadingModels && (
+                      <span className="mt-1 block text-xs text-slate-400">
+                        جارٍ جلب النماذج المتاحة من Groq...
+                      </span>
+                    )}
                   </Field>
                 </div>
 

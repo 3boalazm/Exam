@@ -15,7 +15,11 @@ export interface GroqCredentials {
   source: "manual" | "env";
 }
 
-export const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
+/**
+ * النموذج الافتراضي — نفضّل نموذجًا قويًا في العربية ومتوفرًا حاليًا على Groq.
+ * يُستبدل تلقائيًا عند اختيار المعلم نموذجًا من قائمة النماذج الحيّة.
+ */
+export const DEFAULT_GROQ_MODEL = "qwen/qwen3-32b";
 
 /** اعتمادات من متغيرات البيئة (fallback) */
 export function envGroqCredentials(): GroqCredentials | null {

@@ -40,6 +40,68 @@ function httpKind(status: number): GroqErrorKind {
   return "http";
 }
 
+const GROQ_MODELS_URL = "https://api.groq.com/openai/v1/models";
+
+export interface GroqModelInfo {
+  id: string;
+  active: boolean;
+  contextWindow?: number;
+  ownedBy?: string;
+}
+
+/**
+ * جلب قائمة النماذج المتاحة فعليًا على Groq لحساب هذا المفتاح —
+ * يمنع الاعتماد على قوائم جامدة قد تتقادم (النماذج تُستبدل باستمرار).
+ */
+export async function listGroqModels(
+  credentials: GroqCredentials,
+  timeoutMs = 15_000
+): Promise<GroqModelInfo[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(GROQ_MODELS_URL, {
+      headers: { Authorization: `Bearer ${credentials.apiKey}` },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new GroqError(
+        httpKind(res.status),
+        `Groq models error ${res.status}: ${text.slice(0, 200)}`,
+        res.status
+      );
+    }
+    const json = (await res.json()) as {
+      data?: {
+        id?: string;
+        active?: boolean;
+        context_window?: number;
+        owned_by?: string;
+      }[];
+    };
+    return (json.data ?? [])
+      .filter((m) => typeof m.id === "string" && m.id)
+      .map((m) => ({
+        id: m.id as string,
+        active: m.active !== false,
+        contextWindow: m.context_window,
+        ownedBy: m.owned_by,
+      }));
+  } catch (error) {
+    if (error instanceof GroqError) throw error;
+    if (controller.signal.aborted) {
+      throw new GroqError("timeout", "انتهت مهلة جلب النماذج من Groq");
+    }
+    throw new GroqError(
+      "network",
+      `تعذر الوصول إلى خوادم Groq: ${(error as Error)?.message ?? "خطأ غير معروف"}`
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export interface PromptParts {
   system: string;
   user: string;
