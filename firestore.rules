@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// ============================================================
+//  قواعد Firestore — للنظام المصغّر
+//
+//  الفكرة: كل القراءة/الكتابة الحساسة (الإجابات الصحيحة، التصحيح،
+//  النتائج) تتم عبر Admin SDK من الخادم، ولا يتفاعل أي عميل
+//  مباشر مع البيانات الحساسة.
+//
+//  لذا القاعدة العامة هنا مشدّدة: لا وصول مباشر من العملاء.
+//  (لو أضفت لاحقًا قراءة مباشرة من العميل، افتح مسارات محددة هنا.)
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // المعلمين — يُنشأ/يُحدَّث عبر الخادم فقط
+    match /teachers/{teacherId} {
+      allow read, write: if false;
+    }
+
+    // الاختبارات
+    match /exams/{examId} {
+      allow read, write: if false;
+    }
+
+    // الأسئلة (تحتوي correctAnswer — سرية)
+    match /questions/{questionId} {
+      allow read, write: if false;
+    }
+
+    // المحاولات
+    match /attempts/{attemptId} {
+      allow read, write: if false;
+    }
+
+    // الإجابات التفصيلية
+    match /answers/{answerId} {
+      allow read, write: if false;
+    }
+  }
+}
