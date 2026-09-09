@@ -11,6 +11,7 @@ import {
   buildSinglePrompt,
   callGroqJSON,
   extractQuestionsArray,
+  GROQ_REQUEST_TIMEOUT_MS,
 } from "@/lib/groq/generator";
 import { validateQuestion } from "./validator";
 import { findBankQuestions, type BankQuestion } from "@/lib/bank";
@@ -29,6 +30,35 @@ export interface GenerationResult {
 }
 
 const MAX_ATTEMPTS = 3; // حد أقصى للمحاولات لكل سؤال
+const GENERATION_BUDGET_MS = 50_000;
+
+function selectedTopics(settings: ExamSettings): string[] {
+  // ExamSettings الجديد يضمن topics، والـ fallback يحمي الاستدعاءات القديمة.
+  return settings.topics?.length ? settings.topics : [settings.topic];
+}
+
+/** أمثلة من كل وحدة: حتى 3 للوحدة وبحد أقصى 8 إجمالًا. */
+function findReferenceQuestions(settings: ExamSettings): BankQuestion[] {
+  const topics = selectedTopics(settings);
+  const groups = topics.map((topic) =>
+    findBankQuestions({
+      subject: settings.subject,
+      topics: [topic],
+      subtopic: topics.length === 1 ? settings.subtopic : undefined,
+      limit: 3,
+    })
+  );
+
+  // التناوب هنا يعطي أكبر عدد ممكن من الوحدات فرصة الظهور قبل بلوغ حد 8.
+  const refs: BankQuestion[] = [];
+  for (let round = 0; round < 3 && refs.length < 8; round++) {
+    for (const group of groups) {
+      if (group[round]) refs.push(group[round]);
+      if (refs.length === 8) break;
+    }
+  }
+  return refs;
+}
 
 /** توزيع عدد الأسئلة على الأنواع المطلوبة بالتساوي */
 export function allocateTypes(
@@ -89,6 +119,7 @@ export async function generateQuestions(
   existing: Question[] = []
 ): Promise<GenerationResult> {
   const useAI = Boolean(process.env.GROQ_API_KEY);
+  const topics = selectedTopics(settings);
   const slots = allocateTypes(settings.questionTypes, settings.questionCount);
   const perType: Partial<Record<QuestionType, number>> = {};
   for (const t of slots) perType[t] = (perType[t] ?? 0) + 1;
@@ -101,25 +132,51 @@ export async function generateQuestions(
   /* ---------- الوضع التجريبي / بدون مفتاح Groq: من بنك الأسئلة ---------- */
   if (!useAI) {
     const questions: GeneratedQuestion[] = [];
-    for (const type of slots) {
-      // أولًا من نفس الموضوع، ولو قلّت يملأ من المادة كلها
-      let candidates = findBankQuestions({
+    const pickedPerTopic = new Map(topics.map((topic) => [topic, 0]));
+    const targetPerTopic = new Map(
+      topics.map((topic, index) => [
+        topic,
+        Math.floor(slots.length / topics.length) +
+          (index < slots.length % topics.length ? 1 : 0),
+      ])
+    );
+
+    for (let i = 0; i < slots.length; i++) {
+      const type = slots[i];
+      const candidates = findBankQuestions({
         subject: settings.subject,
-        topic: settings.topic,
-        subtopic: settings.subtopic,
+        topics,
+        subtopic: topics.length === 1 ? settings.subtopic : undefined,
         type,
         excludeTexts: [...usedTexts],
       });
-      if (!candidates.length) {
-        candidates = findBankQuestions({
-          subject: settings.subject,
-          type,
-          excludeTexts: [...usedTexts],
-        });
-      }
       if (!candidates.length) continue;
-      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+
+      // كل خانة تبدأ بوحدة مختلفة، ثم تنتقل للوحدة التالية فقط إذا نفدت
+      // أسئلة النوع المطلوب؛ وبذلك يظل الاختيار داخل اتحاد الوحدات المحددة.
+      const rotatedTopics = topics.map(
+        (_, offset) => topics[(i + offset) % topics.length]
+      );
+      let pick: BankQuestion | undefined;
+      for (const targetTopic of rotatedTopics) {
+        const picked = pickedPerTopic.get(targetTopic) ?? 0;
+        const target = targetPerTopic.get(targetTopic) ?? 0;
+        if (picked >= target) continue;
+        pick = candidates.find((candidate) => candidate.topic === targetTopic);
+        if (pick) break;
+      }
+      // إذا تعذّر الحفاظ على الحصة المثالية بسبب نقص نوع معيّن، نأخذ من
+      // أقرب وحدة في دورة التناوب بدل الخروج من الوحدات المختارة.
+      if (!pick) {
+        for (const targetTopic of rotatedTopics) {
+          pick = candidates.find((candidate) => candidate.topic === targetTopic);
+          if (pick) break;
+        }
+      }
+      if (!pick) continue;
+
       const q = bankToQuestion(pick);
+      pickedPerTopic.set(pick.topic, (pickedPerTopic.get(pick.topic) ?? 0) + 1);
       usedTexts.add(normalizeText(q.question));
       questions.push(q);
     }
@@ -133,19 +190,21 @@ export async function generateQuestions(
   }
 
   /* ---------- الوضع الحقيقي: Groq ---------- */
-  const refs = findBankQuestions({
-    subject: settings.subject,
-    topic: settings.topic,
-    subtopic: settings.subtopic,
-    limit: 6,
-  });
+  const refs = findReferenceQuestions(settings);
+  const deadline = Date.now() + GENERATION_BUDGET_MS;
+  let budgetExceeded = false;
 
   const results: (GeneratedQuestion | null)[] = new Array(slots.length).fill(null);
 
   // 1) محاولة دفعة كاملة
   const batch = buildBatchPrompt(settings, refs, perType);
   try {
-    const data = await callGroqJSON(batch.system, batch.user);
+    const data = await callGroqJSON(
+      batch.system,
+      batch.user,
+      0.9,
+      Math.min(GROQ_REQUEST_TIMEOUT_MS, Math.max(1, deadline - Date.now()))
+    );
     const pool = extractQuestionsArray(data);
     const remaining = [...pool];
     slots.forEach((type, i) => {
@@ -164,24 +223,52 @@ export async function generateQuestions(
   }
 
   // 2) إعادة توليد منفردة لكل سؤال فشل (حتى MAX_ATTEMPTS إجماليًا)
-  for (let i = 0; i < slots.length; i++) {
+  // الميزانية محسوبة من بداية استدعاءات Groq حتى لا نتجاوز حد Vercel (60 ثانية).
+  retryLoop: for (let i = 0; i < slots.length; i++) {
     let attempts = results[i] ? 1 : 0;
     while (!results[i] && attempts < MAX_ATTEMPTS) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        budgetExceeded = true;
+        break retryLoop;
+      }
+
       attempts++;
       const single = buildSinglePrompt(settings, slots[i]);
       try {
-        const data = await callGroqJSON(single.system, single.user, 1.0);
+        const data = await callGroqJSON(
+          single.system,
+          single.user,
+          1.0,
+          Math.min(GROQ_REQUEST_TIMEOUT_MS, remainingMs)
+        );
         const arr = extractQuestionsArray(data);
         results[i] = arr.length
           ? tryAdopt(arr[0], usedTexts)
           : null;
       } catch (e) {
         console.error(`[generator] single retry failed (attempt ${attempts})`, e);
+        if (Date.now() >= deadline) {
+          budgetExceeded = true;
+          break retryLoop;
+        }
       }
     }
   }
 
   const questions = results.filter(Boolean) as GeneratedQuestion[];
+  if (
+    !budgetExceeded &&
+    questions.length < slots.length &&
+    Date.now() >= deadline
+  ) {
+    budgetExceeded = true;
+  }
+  if (budgetExceeded) {
+    warnings.push(
+      "توقفت محاولات الإعادة بعد بلوغ مهلة التوليد (50 ثانية)، وتم الاحتفاظ بالأسئلة التي تولدت بنجاح"
+    );
+  }
   if (questions.length < slots.length) {
     warnings.push(`تم توليد ${questions.length} من ${slots.length} سؤالًا — أضف الباقي يدويًا أو أعد التوليد`);
   }
@@ -196,24 +283,17 @@ export async function generateReplacement(
   type: QuestionType,
   original: Question
 ): Promise<GeneratedQuestion | null> {
+  const topics = selectedTopics(settings);
   if (!process.env.GROQ_API_KEY) {
-    // الوضع التجريبي: سؤال مختلف من البنك بنفس النوع
-    // (نفس المنطق: الموضوع أولًا، ثم المادة كاملة)
-    let alt = findBankQuestions({
+    // الوضع التجريبي: البديل يظل داخل اتحاد الوحدات المختارة.
+    const alt = findBankQuestions({
       subject: settings.subject,
-      topic: settings.topic,
+      topics,
+      subtopic: topics.length === 1 ? settings.subtopic : undefined,
       type,
       excludeTexts: [normalizeText(original.question)],
       excludeIds: original.bankId ? [original.bankId] : [],
     });
-    if (!alt.length) {
-      alt = findBankQuestions({
-        subject: settings.subject,
-        type,
-        excludeTexts: [normalizeText(original.question)],
-        excludeIds: original.bankId ? [original.bankId] : [],
-      });
-    }
     if (!alt.length) return null;
     return bankToQuestion(alt[0]);
   }
@@ -222,9 +302,17 @@ export async function generateReplacement(
   const single = buildSinglePrompt(settings, type, {
     question: original.question,
   });
+  const deadline = Date.now() + GENERATION_BUDGET_MS;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
     try {
-      const data = await callGroqJSON(single.system, single.user, 1.0);
+      const data = await callGroqJSON(
+        single.system,
+        single.user,
+        1.0,
+        Math.min(GROQ_REQUEST_TIMEOUT_MS, remainingMs)
+      );
       const arr = extractQuestionsArray(data);
       if (arr.length) {
         const q = tryAdopt(arr[0], used);

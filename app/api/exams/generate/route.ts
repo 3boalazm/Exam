@@ -17,7 +17,7 @@ export const POST = apiHandler(async (req, { teacher }) => {
     const messages: Record<string, string> = {
       title: "العنوان يجب أن يكون 3 أحرف على الأقل",
       subject: "المادة مطلوبة",
-      topic: "الموضوع مطلوب",
+      topics: "اختر وحدة واحدة على الأقل",
       questionTypes: "اختر نوع سؤال واحدًا على الأقل",
       questionCount: "عدد الأسئلة بين 3 و 40",
     };
@@ -26,7 +26,12 @@ export const POST = apiHandler(async (req, { teacher }) => {
 
   const result = await generateExam(teacher, {
     ...parsed.data,
-    subtopic: parsed.data.subtopic || undefined,
+    // نحفظ الحقل القديم دائمًا كأول وحدة لضمان التوافق مع البيانات السابقة.
+    topic: parsed.data.topics[0],
+    subtopic:
+      parsed.data.topics.length === 1
+        ? parsed.data.subtopic || undefined
+        : undefined,
   });
   return result;
 });

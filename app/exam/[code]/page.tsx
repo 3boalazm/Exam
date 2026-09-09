@@ -163,7 +163,7 @@ export default function StudentExamPage() {
               <div className="text-4xl">📝</div>
               <h1 className="mt-3 text-2xl font-black text-slate-900">{exam.title}</h1>
               <div className="mt-2 text-sm text-slate-500">
-                {exam.subject} · {exam.topic}
+                {exam.subject} · {(exam.topics ?? [exam.topic]).join("، ")}
                 {exam.subtopic ? ` · ${exam.subtopic}` : ""}
               </div>
             </div>

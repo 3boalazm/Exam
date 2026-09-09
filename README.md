@@ -72,7 +72,7 @@ npm run dev
 # توليد امتحان (معلم تجريبي)
 curl -X POST http://localhost:3000/api/exams/generate \
   -H "Content-Type: application/json" -H "x-demo-teacher: demo-ahmed" \
-  -d '{"title":"اختبار المتتابعات","subject":"رياضيات","topic":"المتتابعات الحسابية","questionTypes":["MCQ","TRUE_FALSE"],"difficulty":"mixed","questionCount":8}'
+  -d '{"title":"اختبار المتتابعات","subject":"رياضيات","topics":["المتتابعات الحسابية","المتتابعات الهندسية"],"questionTypes":["MCQ","TRUE_FALSE"],"difficulty":"mixed","questionCount":8}'
 ```
 
 ---
@@ -129,7 +129,7 @@ curl -X POST http://localhost:3000/api/exams/generate \
 
 ```
 teachers/{teacherId}      { name, email, createdAt }
-exams/{examId}            { teacherId, title, subject, topic, subtopic,
+exams/{examId}            { teacherId, title, subject, topic, topics[], subtopic,
                             difficulty, questionTypes, questionCount,
                             status(draft|published|closed), code,
                             showResult, whatsappMessage, createdAt, publishedAt }

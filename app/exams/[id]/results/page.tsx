@@ -98,7 +98,7 @@ export default function ExamResultsPage() {
           <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
             <Badge tone="indigo">{exam.code}</Badge>
             <span>
-              {exam.subject} · {exam.topic}
+              {exam.subject} · {(exam.topics ?? [exam.topic]).join("، ")}
               {exam.subtopic ? ` · ${exam.subtopic}` : ""}
             </span>
             <span className="text-slate-300">|</span>

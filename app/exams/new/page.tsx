@@ -30,7 +30,7 @@ export default function NewExamPage() {
   const router = useRouter();
   const { config } = useTeacher();
   const [subject, setSubject] = useState("");
-  const [topic, setTopic] = useState("");
+  const [topics, setTopics] = useState<string[]>([]);
   const [subtopic, setSubtopic] = useState("");
   const [title, setTitle] = useState("");
   const [types, setTypes] = useState<QuestionType[]>(["MCQ", "TRUE_FALSE"]);
@@ -42,7 +42,11 @@ export default function NewExamPage() {
 
   useEffect(() => {
     if (config?.subject) setSubject(config.subject);
-    if (config?.topics?.length) setTopic(config.topics[0].name);
+    if (config?.topics?.length) {
+      setTopics((current) =>
+        current.length ? current : [config.topics[0].name]
+      );
+    }
   }, [config]);
 
   // رسائل توليد متحركة أثناء الانتظار
@@ -56,8 +60,20 @@ export default function NewExamPage() {
     return () => clearInterval(t);
   }, [busy]);
 
-  const currentTopic = config?.topics?.find((t) => t.name === topic);
+  const currentTopic =
+    topics.length === 1
+      ? config?.topics?.find((t) => t.name === topics[0])
+      : undefined;
   const hasSubtopics = (currentTopic?.subtopics?.length ?? 0) > 0;
+
+  function toggleTopic(topic: string) {
+    const next = topics.includes(topic)
+      ? topics.filter((item) => item !== topic)
+      : [...topics, topic];
+    setTopics(next);
+    // الدرس الفرعي له معنى فقط عندما تكون هناك وحدة واحدة مختارة.
+    if (next.length !== 1 || next[0] !== topics[0]) setSubtopic("");
+  }
 
   function toggleType(t: QuestionType) {
     setTypes((prev) =>
@@ -67,6 +83,10 @@ export default function NewExamPage() {
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
+    if (topics.length === 0) {
+      setError("اختر وحدة واحدة على الأقل");
+      return;
+    }
     if (types.length === 0) {
       setError("اختر نوع سؤال واحدًا على الأقل");
       return;
@@ -76,10 +96,10 @@ export default function NewExamPage() {
     try {
       const res = await apiFetch<{ exam: { id: string } }>("/api/exams/generate", {
         body: {
-          title: title.trim() || `اختبار ${topic}`,
+          title: title.trim() || `اختبار ${topics[0]}`,
           subject,
-          topic,
-          subtopic: subtopic || undefined,
+          topics,
+          subtopic: topics.length === 1 ? subtopic || undefined : undefined,
           questionTypes: types,
           difficulty,
           questionCount: count,
@@ -118,7 +138,7 @@ export default function NewExamPage() {
                   placeholder="اختبار المتتابعات الحسابية"
                 />
               </Field>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-4">
                 <Field label="المادة">
                   <Input
                     value={subject}
@@ -126,23 +146,45 @@ export default function NewExamPage() {
                     placeholder="رياضيات"
                   />
                 </Field>
-                <Field label="الموضوع / الوحدة">
-                  <Select
-                    value={topic}
-                    onChange={(e) => {
-                      setTopic(e.target.value);
-                      setSubtopic("");
-                    }}
-                  >
-                    {(config?.topics ?? []).map((t) => (
-                      <option key={t.name} value={t.name}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+                <div>
+                  <span className="mb-1.5 block text-sm font-semibold text-slate-700">
+                    الموضوع / الوحدة
+                  </span>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {(config?.topics ?? []).map((t) => {
+                      const checked = topics.includes(t.name);
+                      const disabled = !checked && topics.length >= 10;
+                      return (
+                        <label
+                          key={t.name}
+                          className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                            checked
+                              ? "cursor-pointer border-indigo-400 bg-indigo-50"
+                              : disabled
+                                ? "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60"
+                                : "cursor-pointer border-slate-200 bg-white hover:border-slate-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={() => toggleTopic(t.name)}
+                            className="h-5 w-5 accent-indigo-600"
+                          />
+                          <span className="font-semibold text-slate-800">
+                            {t.name}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <span className="mt-1 block text-xs text-slate-400">
+                    يمكنك اختيار وحدة واحدة أو أكثر (بحد أقصى 10)
+                  </span>
+                </div>
               </div>
-              {hasSubtopics && (
+              {topics.length === 1 && hasSubtopics && (
                 <Field label="الدرس / الموضوع الفرعي">
                   <Select
                     value={subtopic}

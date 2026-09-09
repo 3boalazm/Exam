@@ -699,7 +699,9 @@ export default function ExamReviewPage() {
           <div className="flex flex-wrap items-center gap-3">
             <Badge tone={status.tone}>{status.label}</Badge>
             <Badge tone="slate">{exam!.subject}</Badge>
-            <Badge tone="slate">{exam!.topic}</Badge>
+            <Badge tone="slate">
+              {(exam!.topics ?? [exam!.topic]).join("، ")}
+            </Badge>
             {exam!.subtopic && <Badge tone="slate">{exam!.subtopic}</Badge>}
             <Badge tone="sky">
               {questions.length} سؤال · {questions.reduce((s, q) => s + q.points, 0)} درجة
