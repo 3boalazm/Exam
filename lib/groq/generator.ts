@@ -199,8 +199,11 @@ export async function callGroqJSON(
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
+      // 404 أو 400 مع ذكر النموذج = اسم نموذج غير متوفر
+      const modelMissing =
+        res.status === 404 || /model/i.test(text) || /not found/i.test(text);
       throw new GroqError(
-        httpKind(res.status),
+        modelMissing ? "not_found" : httpKind(res.status),
         `Groq API error ${res.status}: ${text.slice(0, 200)}`,
         res.status
       );

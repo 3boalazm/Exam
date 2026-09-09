@@ -1,5 +1,4 @@
 import { apiHandler } from "@/lib/api";
-import { groqTestSchema } from "@/lib/api-schemas";
 import { ApiError } from "@/lib/utils";
 import { callGroqJSON, GroqError } from "@/lib/groq/generator";
 import {
@@ -11,28 +10,36 @@ export const runtime = "nodejs";
 
 /**
  * اختبار اتصال Groq (زر «اختبار الاتصال»):
- * - إن مرّر المعلم مفتاحًا/نموذجًا في الطلب تُستخدم (تجربة قبل الحفظ)
+ * - إن كتب المعلم مفتاحًا/نموذجًا في الطلب تُستخدم (تجربة قبل الحفظ)
  * - وإلا يُستخدم الإعداد اليدوي المحفوظ ثم متغيرات البيئة
+ *
+ * نصيحة: لا نرفض المفتاح شكلًا — Groq هو من يقرر صحة المفتاح.
  */
 export const POST = apiHandler(async (req, { teacher }) => {
-  const body = await req.json().catch(() => ({}));
-  const parsed = groqTestSchema.safeParse(body);
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const typedKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+  const typedModel = typeof body.model === "string" ? body.model.trim() : "";
 
-  let apiKey: string | null =
-    parsed.success && parsed.data.apiKey ? parsed.data.apiKey : null;
-  let model: string | null =
-    parsed.success && parsed.data.model ? parsed.data.model : null;
+  if (typedKey && typedKey.length < 8) {
+    throw new ApiError(
+      400,
+      "المفتاح المدخل أقصر من اللازم — تأكد من نسخه كاملًا"
+    );
+  }
 
-  if (!apiKey || !model) {
+  let apiKey = typedKey;
+  let model = typedModel;
+
+  if (!apiKey) {
     const creds = await resolveGroqCredentials(teacher.id);
     if (!creds) {
       throw new ApiError(
         400,
-        "لا يوجد مفتاح Groq — أدخل مفتاحًا أو احفظه أولًا"
+        "لا يوجد مفتاح Groq — اكتب مفتاحك في الحقل أو احفظه أولًا ثم أعد الاختبار"
       );
     }
     apiKey = creds.apiKey;
-    model = creds.model;
+    model = model || creds.model;
   }
 
   const finalModel = model || DEFAULT_GROQ_MODEL;
@@ -44,16 +51,17 @@ export const POST = apiHandler(async (req, { teacher }) => {
       'أعد الكائن التالي حرفيًا: {"ok": true}',
       0,
       15_000,
-      { apiKey: apiKey as string, model: finalModel, source: "manual" }
+      { apiKey, model: finalModel, source: "manual" }
     );
     return { ok: true, model: finalModel, latencyMs: Date.now() - started };
   } catch (e) {
+    console.error("[groq-test] failed", e);
     const g = e instanceof GroqError ? e : null;
     switch (g?.kind) {
       case "auth":
         throw new ApiError(
           401,
-          "المفتاح غير صالح أو غير مصرّح له — تحقق من مفتاح Groq وحدوده"
+          "المفتاح غير صالح أو غير مصرّح له — تحقق من مفتاح Groq أو أعد إنشاءه من console.groq.com/keys"
         );
       case "rate_limit":
         throw new ApiError(
@@ -63,21 +71,26 @@ export const POST = apiHandler(async (req, { teacher }) => {
       case "not_found":
         throw new ApiError(
           400,
-          `النموذج غير موجود: "${finalModel}" — تحقق من اسم النموذج`
+          `النموذج غير متوفر: "${finalModel}" — جرّب نموذجًا آخر مثل llama-3.3-70b-versatile`
         );
       case "timeout":
         throw new ApiError(504, "انتهت مهلة الاتصال بـ Groq — حاول مرة أخرى");
       case "network":
         throw new ApiError(
           502,
-          "تعذر الوصول إلى خوادم Groq (مشكلة شبكة أو اتصال خارجي) — تأكد من اتصال الخادم بالإنترنت"
+          "تعذر الوصول إلى خوادم Groq — تأكد من اتصال الخادم بالإنترنت"
         );
       case "empty":
-        throw new ApiError(502, "Groq أعاد إجابة فارغة — حاول مرة أخرى");
       case "parse":
-        throw new ApiError(502, "تعذر تحليل استجابة Groq — حاول مرة أخرى");
+        throw new ApiError(
+          502,
+          "Groq أعاد استجابة غير متوقعة — حاول مرة أخرى"
+        );
       default:
-        throw new ApiError(502, `فشل الاتصال بـ Groq: ${(e as Error).message}`);
+        throw new ApiError(
+          502,
+          `فشل الاتصال بـ Groq: ${(e as Error).message}`
+        );
     }
   }
 });
