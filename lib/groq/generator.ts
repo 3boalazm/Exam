@@ -11,6 +11,35 @@ import { DEFAULT_GROQ_MODEL, type GroqCredentials } from "./settings";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 export const GROQ_REQUEST_TIMEOUT_MS = 45_000;
 
+/** تصنيف أخطاء Groq — لعرض رسالة عربية واضحة للمعلم */
+export type GroqErrorKind =
+  | "auth" // مفتاح غير صالح / غير مصرّح (401/403)
+  | "rate_limit" // تجاوز حد الطلبات (429)
+  | "not_found" // النموذج غير موجود (404)
+  | "http" // أخطاء HTTP أخرى
+  | "network" // تعذر الوصول للخوادم (DNS/شبكة)
+  | "timeout" // انتهاء المهلة
+  | "empty" // استجابة فارغة
+  | "parse"; // تعذر تحليل JSON
+
+export class GroqError extends Error {
+  kind: GroqErrorKind;
+  status?: number;
+  constructor(kind: GroqErrorKind, message: string, status?: number) {
+    super(message);
+    this.name = "GroqError";
+    this.kind = kind;
+    if (status !== undefined) this.status = status;
+  }
+}
+
+function httpKind(status: number): GroqErrorKind {
+  if (status === 401 || status === 403) return "auth";
+  if (status === 429) return "rate_limit";
+  if (status === 404) return "not_found";
+  return "http";
+}
+
 export interface PromptParts {
   system: string;
   user: string;
@@ -135,7 +164,7 @@ export async function callGroqJSON(
   credentials?: GroqCredentials
 ): Promise<unknown> {
   const key = credentials?.apiKey || process.env.GROQ_API_KEY;
-  if (!key) throw new Error("GROQ_API_KEY غير محدد");
+  if (!key) throw new GroqError("auth", "GROQ_API_KEY غير محدد");
   const model =
     credentials?.model || process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
 
@@ -170,7 +199,11 @@ export async function callGroqJSON(
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`Groq API error ${res.status}: ${text.slice(0, 200)}`);
+      throw new GroqError(
+        httpKind(res.status),
+        `Groq API error ${res.status}: ${text.slice(0, 200)}`,
+        res.status
+      );
     }
 
     const json = (await res.json()) as {
@@ -178,7 +211,7 @@ export async function callGroqJSON(
     };
     const content = json.choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim()) {
-      throw new Error("Groq أعاد إجابة فارغة");
+      throw new GroqError("empty", "Groq أعاد إجابة فارغة");
     }
 
     // تنظيف أي Markdown fences محتملة
@@ -190,13 +223,18 @@ export async function callGroqJSON(
     try {
       return JSON.parse(cleaned);
     } catch {
-      throw new Error("تعذر تحليل JSON من Groq");
+      throw new GroqError("parse", "تعذر تحليل JSON من Groq");
     }
   } catch (error) {
+    if (error instanceof GroqError) throw error;
     if (controller.signal.aborted) {
-      throw new Error("انتهت مهلة الاتصال بـ Groq");
+      throw new GroqError("timeout", "انتهت مهلة الاتصال بـ Groq");
     }
-    throw error;
+    // فشل على مستوى الشبكة (DNS / تعذر الوصول / رفض الاتصال)
+    throw new GroqError(
+      "network",
+      `تعذر الوصول إلى خوادم Groq: ${(error as Error)?.message ?? "خطأ غير معروف"}`
+    );
   } finally {
     clearTimeout(timeout);
   }

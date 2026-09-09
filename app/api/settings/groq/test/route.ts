@@ -1,7 +1,7 @@
 import { apiHandler } from "@/lib/api";
 import { groqTestSchema } from "@/lib/api-schemas";
 import { ApiError } from "@/lib/utils";
-import { callGroqJSON } from "@/lib/groq/generator";
+import { callGroqJSON, GroqError } from "@/lib/groq/generator";
 import {
   DEFAULT_GROQ_MODEL,
   resolveGroqCredentials,
@@ -48,7 +48,36 @@ export const POST = apiHandler(async (req, { teacher }) => {
     );
     return { ok: true, model: finalModel, latencyMs: Date.now() - started };
   } catch (e) {
-    const message = (e as Error).message || "تعذر الاتصال بـ Groq";
-    throw new ApiError(502, `فشل الاتصال بـ Groq: ${message}`);
+    const g = e instanceof GroqError ? e : null;
+    switch (g?.kind) {
+      case "auth":
+        throw new ApiError(
+          401,
+          "المفتاح غير صالح أو غير مصرّح له — تحقق من مفتاح Groq وحدوده"
+        );
+      case "rate_limit":
+        throw new ApiError(
+          429,
+          "تم تجاوز حد الطلبات في Groq — انتظر قليلًا ثم أعد المحاولة"
+        );
+      case "not_found":
+        throw new ApiError(
+          400,
+          `النموذج غير موجود: "${finalModel}" — تحقق من اسم النموذج`
+        );
+      case "timeout":
+        throw new ApiError(504, "انتهت مهلة الاتصال بـ Groq — حاول مرة أخرى");
+      case "network":
+        throw new ApiError(
+          502,
+          "تعذر الوصول إلى خوادم Groq (مشكلة شبكة أو اتصال خارجي) — تأكد من اتصال الخادم بالإنترنت"
+        );
+      case "empty":
+        throw new ApiError(502, "Groq أعاد إجابة فارغة — حاول مرة أخرى");
+      case "parse":
+        throw new ApiError(502, "تعذر تحليل استجابة Groq — حاول مرة أخرى");
+      default:
+        throw new ApiError(502, `فشل الاتصال بـ Groq: ${(e as Error).message}`);
+    }
   }
 });
