@@ -1,18 +1,13 @@
 "use client";
 
 import { APP_VERSION } from "@/lib/version";
+import { BASE_FONT, CHAR_BUDGET, fittedFontSize } from "@/lib/essay/layout";
 import type {
   EssayForm,
   EssayLayout,
   EssayMeta,
   EssayQuestion,
 } from "@/lib/essay/types";
-
-const BASE_FONT: Record<EssayLayout, string> = {
-  4: "9px",
-  2: "10.5px",
-  1: "13.5px",
-};
 
 /**
  * عدد خطوط الإجابة يقل تلقائيًا كلما زاد عدد الأسئلة في النموذج
@@ -53,6 +48,7 @@ function FormPaper({
   subject,
   grade,
   showLines,
+  showAnswers,
 }: {
   form: EssayForm;
   layout: EssayLayout;
@@ -60,11 +56,14 @@ function FormPaper({
   subject: string;
   grade: string;
   showLines: boolean;
+  showAnswers: boolean;
 }) {
+  const fontSize = fittedFontSize(layout, form.questions, showAnswers);
+
   return (
     <article
-      className="essay-form flex min-h-0 flex-col overflow-hidden border border-slate-300 bg-white p-[0.55em] text-slate-900"
-      style={{ fontSize: BASE_FONT[layout] }}
+      className="essay-form flex min-h-0 flex-col overflow-hidden border border-slate-300 bg-white p-[0.5em] text-slate-900"
+      style={{ fontSize: `${fontSize}px` }}
     >
       <header className="flex items-start justify-between gap-[0.5em] border-b border-slate-300 pb-[0.3em]">
         <div className="min-w-0 flex-1">
@@ -112,10 +111,17 @@ function FormPaper({
                 </span>
               </p>
             </div>
-            {showLines && (
-              <AnswerLines
-                count={answerLineCount(layout, form.questions.length)}
-              />
+            {showAnswers ? (
+              <div className="mt-[0.18em] flex gap-[0.3em] rounded-[2px] border border-emerald-300 bg-emerald-50 px-[0.35em] py-[0.12em] leading-snug text-emerald-900">
+                <span className="shrink-0 font-extrabold">الإجابة:</span>
+                <span className="flex-1">{q.answer}</span>
+              </div>
+            ) : (
+              showLines && (
+                <AnswerLines
+                  count={answerLineCount(layout, form.questions.length)}
+                />
+              )
             )}
           </li>
         ))}
@@ -136,6 +142,7 @@ export function EssaySheet({
   subject,
   grade,
   showLines,
+  showAnswers = false,
   pageNumber,
   pageCount,
   kind = "forms",
@@ -146,6 +153,7 @@ export function EssaySheet({
   subject: string;
   grade: string;
   showLines: boolean;
+  showAnswers?: boolean;
   pageNumber: number;
   pageCount: number;
   kind?: "forms" | "key";
@@ -163,6 +171,7 @@ export function EssaySheet({
               subject={subject}
               grade={grade}
               showLines={showLines}
+              showAnswers={showAnswers}
             />
           ) : (
             <KeyPaper
@@ -176,7 +185,12 @@ export function EssaySheet({
       </div>
       <footer className="mt-[2mm] flex items-center justify-between text-[7px] text-slate-400">
         <span>
-          {kind === "key" ? "مفتاح الإجابة" : "ورقة نماذج"} — صفحة {pageNumber}{" "}
+          {kind === "key"
+            ? "مفتاح الإجابة"
+            : showAnswers
+              ? "أسئلة + إجابات نموذجية"
+              : "ورقة نماذج"}{" "}
+          — صفحة {pageNumber}{" "}
           من {pageCount}
         </span>
         <span>Mini Exam v{APP_VERSION} — نماذج الأسئلة المقالية</span>
@@ -194,10 +208,19 @@ function KeyPaper({
   layout: EssayLayout;
   subject: string;
 }) {
+  const fontSize = Math.max(
+    6.6,
+    (BASE_FONT[layout] * CHAR_BUDGET[layout] * 1.6) /
+      Math.max(
+        1,
+        form.questions.reduce((sum, q) => sum + q.answer.length + 20, 0)
+      )
+  );
+
   return (
     <article
-      className="essay-form flex min-h-0 flex-col overflow-hidden border border-slate-300 bg-white p-[0.55em] text-slate-900"
-      style={{ fontSize: BASE_FONT[layout] }}
+      className="essay-form flex min-h-0 flex-col overflow-hidden border border-slate-300 bg-white p-[0.5em] text-slate-900"
+      style={{ fontSize: `${Math.min(BASE_FONT[layout], fontSize)}px` }}
     >
       <header className="flex items-center justify-between border-b border-slate-300 pb-[0.25em]">
         <span className="font-extrabold">مفتاح نموذج {form.number}</span>

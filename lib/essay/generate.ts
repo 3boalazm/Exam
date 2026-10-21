@@ -3,6 +3,7 @@
  * نفس البذرة + نفس الإعدادات = نفس النماذج بالضبط، ما يجعل الطباعة قابلة للتكرار.
  */
 import { essayQuestions, essayTopics } from "./bank";
+import { templatesForTopic } from "./templates";
 import type {
   EssayBuildOptions,
   EssayForm,
@@ -54,6 +55,65 @@ export interface EssayBuildResult {
   notice: string | null;
 }
 
+/** عدد النسخ المختلفة التي تُبنى من كل قالب بأرقام مختلفة */
+export const VARIANTS_PER_TEMPLATE = 6;
+
+function normalize(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * بنك الدرس = الأسئلة المحفوظة (بإجاباتها) + نسخ مولّدة من القوالب بأرقام
+ * مختلفة وإجابات محسوبة. النسخ تُبنى من البذرة نفسها، لذلك تبقى ثابتة عند
+ * إعادة التوليد أو الطباعة.
+ */
+function buildTopicPool(
+  topic: string,
+  opts: EssayBuildOptions
+): EssayQuestion[] {
+  const authored = essayQuestions.filter(
+    (q) =>
+      q.topic === topic &&
+      (opts.difficulty === "mixed" || q.difficulty === opts.difficulty)
+  );
+
+  const out: EssayQuestion[] = [...authored];
+  const seen = new Set(out.map((q) => normalize(q.text)));
+
+  for (const template of templatesForTopic(topic)) {
+    if (opts.difficulty !== "mixed" && template.difficulty !== opts.difficulty) {
+      continue;
+    }
+    for (let variant = 0; variant < VARIANTS_PER_TEMPLATE; variant++) {
+      const rng = createRng(opts.seed, `${topic}|${template.id}|${variant}`);
+      const built = template.build(rng);
+      const key = normalize(built.text);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        id: `t:${template.id}:${variant}`,
+        topic,
+        skill: template.skill,
+        difficulty: template.difficulty,
+        points: template.points,
+        text: built.text,
+        answer: built.answer,
+      });
+    }
+  }
+
+  const sorted = [...out].sort(
+    (a, b) => DIFFICULTY_ORDER[a.difficulty] - DIFFICULTY_ORDER[b.difficulty]
+  );
+  return shuffleWithRng(sorted, createRng(opts.seed, `pool|${topic}`));
+}
+
+/** إجمالي الأسئلة المتاحة (المحفوظة + المولّدة من القوالب) بالإجابات */
+export function availableQuestionCount(opts: EssayBuildOptions): number {
+  const topics = essayTopics.filter((t) => opts.topics.includes(t));
+  return topics.reduce((sum, topic) => sum + buildTopicPool(topic, opts).length, 0);
+}
+
 export function buildEssayForms(opts: EssayBuildOptions): EssayBuildResult {
   const topics = essayTopics.filter((t) => opts.topics.includes(t));
   const rng = createRng(opts.seed, topics.join("|"));
@@ -62,16 +122,7 @@ export function buildEssayForms(opts: EssayBuildOptions): EssayBuildResult {
 
   const pools = new Map<string, EssayQuestion[]>();
   for (const topic of topics) {
-    const list = essayQuestions.filter(
-      (q) =>
-        q.topic === topic &&
-        (opts.difficulty === "mixed" || q.difficulty === opts.difficulty)
-    );
-    // الأسهل أولًا داخل كل درس، مع خلط حتمي
-    const sorted = [...list].sort(
-      (a, b) => DIFFICULTY_ORDER[a.difficulty] - DIFFICULTY_ORDER[b.difficulty]
-    );
-    pools.set(topic, shuffleWithRng(sorted, rng));
+    pools.set(topic, buildTopicPool(topic, opts));
   }
 
   const usableTopics = topics.filter((t) => (pools.get(t)?.length ?? 0) > 0);
@@ -83,7 +134,7 @@ export function buildEssayForms(opts: EssayBuildOptions): EssayBuildResult {
   }
 
   const perForm = Math.max(1, Math.min(opts.perForm, 10));
-  const count = Math.max(1, Math.min(opts.count, 45));
+  const count = Math.max(1, Math.min(opts.count, 90));
   const pointers = new Map<string, number>(usableTopics.map((t) => [t, 0]));
   const usage = new Map<string, number>(usableTopics.map((t) => [t, 0]));
   const forms: EssayForm[] = [];
