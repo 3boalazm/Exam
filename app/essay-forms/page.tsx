@@ -530,8 +530,8 @@ export default function EssayFormsPage() {
                   {forms.length} نموذج × {perForm} أسئلة ={" "}
                   {forms.length * perForm} سؤال بإجابته
                 </Badge>
-                <Badge tone={showAnswers ? "emerald" : "slate"}>
-                  {showAnswers ? "الإجابة مع السؤال" : "بدون إجابات"}
+                <Badge tone={withKey ? "emerald" : "slate"}>
+                  {withKey ? "أوراق إجابة منفصلة" : "بدون أوراق إجابة"}
                 </Badge>
                 <Badge tone="emerald">
                   {pointRange.min === pointRange.max
