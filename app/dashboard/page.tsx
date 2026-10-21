@@ -130,6 +130,28 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* نماذج الأسئلة المقالية */}
+          <Link
+            href="/essay-forms"
+            className="flex flex-wrap items-center gap-4 rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 transition-colors hover:bg-indigo-50"
+          >
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-2xl shadow-sm">
+              📄
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-extrabold text-slate-900">
+                نماذج الأسئلة المقالية — جاهزة للطباعة
+              </span>
+              <span className="block text-sm text-slate-600">
+                45 نموذجًا مختلفًا، كل نموذج 5 أسئلة، و4 نماذج في ورقة A4 واحدة
+                — مع مفتاح الإجابة.
+              </span>
+            </span>
+            <span className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white">
+              فتح الصفحة ←
+            </span>
+          </Link>
+
           {/* قائمة الاختبارات */}
           {data.exams.length === 0 ? (
             <EmptyState

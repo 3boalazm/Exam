@@ -25,3 +25,118 @@ body {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ================= نماذج الأسئلة المقالية (A4) ================= */
+
+.essay-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  box-sizing: border-box;
+}
+
+.essay-zoom {
+  overflow-x: auto;
+}
+
+@media screen and (max-width: 900px) {
+  .essay-zoom {
+    zoom: 0.68;
+  }
+}
+
+@media screen and (max-width: 680px) {
+  .essay-zoom {
+    zoom: 0.5;
+  }
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 6mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  /* إخفاء واجهة التطبيق الزائدة عند الطباعة */
+  body:has(.essay-print-root) > div,
+  body[data-essay-print="1"] > div {
+    background: #fff !important;
+    min-height: 0 !important;
+  }
+  body:has(.essay-print-root) > div > header,
+  body[data-essay-print="1"] > div > header {
+    display: none !important;
+  }
+  body:has(.essay-print-root) main,
+  body[data-essay-print="1"] main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
+  .essay-print-root .no-print,
+  .essay-print-root .no-print * {
+    display: none !important;
+  }
+
+  .essay-print-root {
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+  }
+
+  .essay-zoom {
+    overflow: visible !important;
+    zoom: 1 !important;
+  }
+
+  .essay-sheet {
+    width: 100% !important;
+    min-height: 0 !important;
+    height: 285mm !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .essay-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .essay-print-root[data-print="forms"] .essay-key,
+  .essay-print-root[data-print="key"] .essay-sheets {
+    display: none !important;
+  }
+
+  .essay-form {
+    border-color: #94a3b8 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+@media print {
+  .essay-sheets,
+  .essay-key {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .essay-sheets > * + *,
+  .essay-key > * + * {
+    margin-top: 0 !important;
+  }
+  .essay-key > .no-print {
+    display: none !important;
+  }
+}
