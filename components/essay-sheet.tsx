@@ -1,5 +1,6 @@
 "use client";
 
+import { APP_VERSION } from "@/lib/version";
 import type {
   EssayForm,
   EssayLayout,
@@ -178,7 +179,7 @@ export function EssaySheet({
           {kind === "key" ? "مفتاح الإجابة" : "ورقة نماذج"} — صفحة {pageNumber}{" "}
           من {pageCount}
         </span>
-        <span>Mini Exam — نماذج الأسئلة المقالية</span>
+        <span>Mini Exam v{APP_VERSION} — نماذج الأسئلة المقالية</span>
       </footer>
     </section>
   );
