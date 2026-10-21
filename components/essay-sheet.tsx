@@ -208,14 +208,15 @@ function KeyPaper({
   layout: EssayLayout;
   subject: string;
 }) {
-  const fontSize = Math.max(
-    6.6,
-    (BASE_FONT[layout] * CHAR_BUDGET[layout] * 1.6) /
-      Math.max(
-        1,
-        form.questions.reduce((sum, q) => sum + q.answer.length + 20, 0)
-      )
-  );
+  const fontSize =
+    Math.max(
+      6.2,
+      (BASE_FONT[layout] * CHAR_BUDGET[layout]) /
+        Math.max(
+          1,
+          form.questions.reduce((sum, q) => sum + q.text.length + q.answer.length, 0)
+        )
+    ) || BASE_FONT[layout];
 
   return (
     <article
@@ -223,23 +224,23 @@ function KeyPaper({
       style={{ fontSize: `${Math.min(BASE_FONT[layout], fontSize)}px` }}
     >
       <header className="flex items-center justify-between border-b border-slate-300 pb-[0.25em]">
-        <span className="font-extrabold">مفتاح نموذج {form.number}</span>
+        <span className="font-extrabold">إجابة نموذج {form.number}</span>
         <span className="text-slate-500">
-          {subject} — {form.code}
+          {subject} — {form.code} — {form.totalPoints} درجة
         </span>
       </header>
       <ol className="mt-[0.35em] flex-1 space-y-[0.4em]">
         {form.questions.map((q, idx) => (
           <li key={q.id} className="break-inside-avoid leading-snug">
-            <div className="font-bold text-slate-700">
-              {idx + 1}) {q.topic}
+            <div className="text-slate-500">
+              {idx + 1}) {q.text}
             </div>
-            <div className="text-slate-600">{q.answer}</div>
+            <div className="font-bold text-emerald-800">↳ {q.answer}</div>
           </li>
         ))}
       </ol>
       <div className="mt-[0.2em] border-t border-slate-200 pt-[0.2em] text-slate-400">
-        الدرجة الكلية: {form.totalPoints}
+        الدرجة الكلية: {form.totalPoints} — تصحيح سريع بنفس أرقام ورقة الطالب
       </div>
     </article>
   );

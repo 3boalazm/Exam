@@ -44,7 +44,7 @@ const DIFFICULTY_LABELS: Record<EssayDifficulty | "mixed", string> = {
   hard: "صعب",
 };
 
-const STORAGE_KEY = "mini_exam_essay_settings_v1";
+const STORAGE_KEY = "mini_exam_essay_settings_v2";
 
 export default function EssayFormsPage() {
   const stats = useMemo(() => essayTopicStats(), []);
@@ -68,9 +68,9 @@ export default function EssayFormsPage() {
   const [formCount, setFormCount] = useState(defaultFormCount);
   const [perForm, setPerForm] = useState(5);
   const [layout, setLayout] = useState<EssayLayout>(4);
-  const [showAnswers, setShowAnswers] = useState(true);
+  const [showAnswers, setShowAnswers] = useState(false);
   const [showLines, setShowLines] = useState(false);
-  const [withKey, setWithKey] = useState(false);
+  const [withKey, setWithKey] = useState(true);
   const [shuffleQuestions, setShuffleQuestions] = useState(true);
   const [seed, setSeed] = useState(1001);
   const [printTarget, setPrintTarget] = useState<"all" | "forms" | "key">("all");
@@ -99,12 +99,15 @@ export default function EssayFormsPage() {
         if (typeof saved.title === "string") setTitle(saved.title);
         if (typeof saved.school === "string") setSchool(saved.school);
         if (typeof saved.duration === "string") setDuration(saved.duration);
+        const knownTopics = stats.map((item) => item.topic);
         if (Array.isArray(saved.topics) && saved.topics.length) {
-          const valid = saved.topics.filter((t) => allTopics.includes(t));
+          const valid = saved.topics.filter((t) => knownTopics.includes(t));
           if (valid.length) setTopics(valid);
         }
         if (saved.difficulty) setDifficulty(saved.difficulty);
-        if (typeof saved.formCount === "number") setFormCount(saved.formCount);
+        if (typeof saved.formCount === "number" && saved.formCount <= 60) {
+          setFormCount(Math.max(1, saved.formCount));
+        }
         if (typeof saved.perForm === "number") setPerForm(saved.perForm);
         if (saved.layout === 1 || saved.layout === 2 || saved.layout === 4) {
           setLayout(saved.layout);
@@ -121,7 +124,7 @@ export default function EssayFormsPage() {
       // إعدادات قديمة تالفة — نتجاهلها
     }
     setHydrated(true);
-  }, [allTopics]);
+  }, [stats]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -215,10 +218,18 @@ export default function EssayFormsPage() {
   }
 
   function handlePrint(target: "all" | "forms" | "key") {
-    if (target !== "forms") setWithKey(true);
+    if (target === "key" && !withKey) setWithKey(true);
+    if (target === "key") setShowAnswers(false);
     setPrintTarget(target);
     window.setTimeout(() => window.print(), 250);
   }
+
+  // بعد انتهاء الطباعة نرجّع المعاينة لعرض كل الأوراق
+  useEffect(() => {
+    const reset = () => setPrintTarget("all");
+    window.addEventListener("afterprint", reset);
+    return () => window.removeEventListener("afterprint", reset);
+  }, []);
 
   return (
     <TeacherShell
@@ -238,23 +249,23 @@ export default function EssayFormsPage() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="max-w-2xl">
                 <h2 className="text-lg font-extrabold text-slate-900">
-                  الإجابة النموذجية تحت كل سؤال — في نفس الورقة
+                  ورق أسئلة للطلاب + ورق إجابات للمصحح — منفصلين
                 </h2>
                 <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                  كل نموذج فيه {perForm} أسئلة مقالية من دروس مختلفة (بدون
-                  تكرار داخل النموذج)، وورقة A4 الواحدة مقسّمة على {layout}{" "}
-                  نموذج{layout > 1 ? "ات" : ""}. أرقام الأسئلة تتغيّر من نموذج
-                  لآخر وتُحسب إجابتها تلقائيًا، لكنها <b>تثبت</b> بمجرد
-                  التوليد — فإعادة الطباعة بنفس الإعدادات تعطي نفس الأرقام
-                  ونفس الإجابات بالضبط.
+                  كل نموذج فيه {perForm} أسئلة مقالية من دروس مختلفة، وورقة A4
+                  الواحدة مقسّمة على {layout} نموذج{layout > 1 ? "ات" : ""}.
+                  تُطبع <b>أوراق الأسئلة</b> للطلاب، وتُطبع <b>أوراق الإجابة</b>
+                  منفصلة بنفس أرقام الأسئلة — فتصحّح بسرعة بدون خلط. أرقام
+                  الأسئلة تتغيّر من نموذج لآخر و<b>تثبت</b> بعد التوليد،
+                  وإجابتها تُحسب من نفس الأرقام دائمًا.
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
                 {[
                   { label: "نموذج", value: forms.length },
-                  { label: "ورقة A4", value: pages.length },
-                  { label: "سؤال بإجابته", value: forms.length * perForm },
-                  { label: "سؤال متاح", value: poolSize },
+                  { label: "ورق أسئلة", value: pages.length },
+                  { label: "ورق إجابات", value: pages.length },
+                  { label: "سؤال", value: forms.length * perForm },
                 ].map((s) => (
                   <div
                     key={s.label}
@@ -453,13 +464,23 @@ export default function EssayFormsPage() {
                   <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-slate-800">
                     <input
                       type="checkbox"
-                      checked={showAnswers}
-                      onChange={(e) => setShowAnswers(e.target.checked)}
+                      checked={withKey}
+                      onChange={(e) => setWithKey(e.target.checked)}
                       className="h-4 w-4 accent-emerald-600"
                     />
                     <span>
-                      <b>الإجابة النموذجية تحت كل سؤال</b> — تُطبع في نفس الورقة
+                      <b>أوراق إجابة منفصلة</b> — لكل نموذج ورقة إجابة بنفس
+                      الأرقام
                     </span>
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={showAnswers}
+                      onChange={(e) => setShowAnswers(e.target.checked)}
+                      className="h-4 w-4 accent-indigo-600"
+                    />
+                    دمج الإجابة تحت السؤال في نفس ورقة الطالب (اختياري)
                   </label>
                   <label className="flex cursor-pointer items-center gap-2 text-slate-700">
                     <input
@@ -479,15 +500,6 @@ export default function EssayFormsPage() {
                     />
                     ترتيب عشوائي للأسئلة داخل كل نموذج
                   </label>
-                  <label className="flex cursor-pointer items-center gap-2 text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={withKey}
-                      onChange={(e) => setWithKey(e.target.checked)}
-                      className="h-4 w-4 accent-indigo-600"
-                    />
-                    تضمين مفتاح الإجابة في المعاينة
-                  </label>
                 </div>
               </div>
             </Card>
@@ -497,11 +509,10 @@ export default function EssayFormsPage() {
           <div className="sticky bottom-3 z-10 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
             <div className="flex flex-wrap items-center gap-2">
               <Button onClick={() => handlePrint("forms")}>
-                🖨️ طباعة {forms.length} نموذج
-                {showAnswers ? " (بالإجابات)" : ""}
+                🖨️ طباعة أوراق الأسئلة ({pages.length} ورقة)
               </Button>
               <Button variant="secondary" onClick={() => handlePrint("key")}>
-                🔑 مفتاح الإجابة
+                🔑 طباعة أوراق الإجابة ({pages.length} ورقة)
               </Button>
               <Button variant="secondary" onClick={() => handlePrint("all")}>
                 📄 طباعة الكل
@@ -527,9 +538,7 @@ export default function EssayFormsPage() {
                     ? `${pointRange.min} درجة/نموذج`
                     : `${pointRange.min}–${pointRange.max} درجة/نموذج`}
                 </Badge>
-                <Badge tone="slate">
-                  {pages.length} ورقة A4
-                </Badge>
+                <Badge tone="slate">{poolSize} سؤال متاح</Badge>
               </div>
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
@@ -546,7 +555,7 @@ export default function EssayFormsPage() {
               معاينة الأوراق
             </h2>
             <span className="text-xs text-slate-400">
-              {pages.length} ورقة × {layout} نموذج — إجمالي {forms.length} نموذج
+              {pages.length} ورقة أسئلة × {layout} نموذج — إجمالي {forms.length} نموذج
             </span>
           </div>
         </div>
@@ -574,10 +583,11 @@ export default function EssayFormsPage() {
             <div className="essay-key mt-10 space-y-6">
               <div className="no-print">
                 <h2 className="text-lg font-extrabold text-slate-900">
-                  مفتاح الإجابة النموذجية
+                  أوراق الإجابة النموذجية (منفصلة)
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  {keyPages.length} ورقة — تُطبع منفصلة عن أوراق الطلاب.
+                  {keyPages.length} ورقة — كل نموذج بإجاباته وبنفس أرقام أسئلته،
+                  تُطبع وحدها من زرار «طباعة أوراق الإجابة».
                 </p>
               </div>
               {keyPages.map((pageForms: EssayForm[], idx) => (
