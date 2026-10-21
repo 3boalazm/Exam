@@ -114,8 +114,8 @@ export default function HomePage() {
               جديد: نماذج الأسئلة المقالية جاهزة للطباعة
             </span>
             <span className="block text-sm text-slate-600">
-              45 نموذجًا مختلفًا، كل ورقة A4 مقسّمة على 4 نماذج — مع مفتاح
-              الإجابة.
+              45 نموذجًا مختلفًا بأرقام متغيّرة، والإجابة النموذجية تحت كل
+              سؤال في نفس الورقة.
             </span>
           </span>
           <span className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white">

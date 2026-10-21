@@ -143,8 +143,8 @@ export default function DashboardPage() {
                 نماذج الأسئلة المقالية — جاهزة للطباعة
               </span>
               <span className="block text-sm text-slate-600">
-                45 نموذجًا مختلفًا، كل نموذج 5 أسئلة، و4 نماذج في ورقة A4 واحدة
-                — مع مفتاح الإجابة.
+                45 نموذجًا مختلفًا بأرقام تتغيّر، والإجابة النموذجية مطبوعة تحت
+                كل سؤال في نفس الورقة — جاهزة للتصحيح بدون مفتاح منفصل.
               </span>
             </span>
             <span className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white">
