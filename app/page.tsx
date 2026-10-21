@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { APP_RELEASE_DATE, APP_VERSION } from "@/lib/version";
 
 export default function HomePage() {
   return (
@@ -100,6 +101,33 @@ export default function HomePage() {
             ))}
           </div>
         </div>
+
+        <Link
+          href="/essay-forms"
+          className="mt-10 flex flex-wrap items-center gap-4 rounded-2xl border border-indigo-200 bg-indigo-50/70 p-5 text-right transition-colors hover:bg-indigo-50"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-2xl shadow-sm">
+            📄
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-extrabold text-slate-900">
+              جديد: نماذج الأسئلة المقالية جاهزة للطباعة
+            </span>
+            <span className="block text-sm text-slate-600">
+              45 نموذجًا مختلفًا، كل ورقة A4 مقسّمة على 4 نماذج — مع مفتاح
+              الإجابة.
+            </span>
+          </span>
+          <span className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white">
+            استعراض ←
+          </span>
+        </Link>
+
+        <footer className="mt-10 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-slate-400">
+          <span>Mini Exam — الإصدار {APP_VERSION}</span>
+          <span className="text-slate-300">•</span>
+          <span>آخر تحديث {APP_RELEASE_DATE}</span>
+        </footer>
       </main>
     </div>
   );
