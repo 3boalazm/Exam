@@ -45,12 +45,6 @@ export function shuffleWithRng<T>(items: T[], rng: Rng): T[] {
   return arr;
 }
 
-function rotate<T>(items: T[], by: number): T[] {
-  if (!items.length) return items;
-  const k = ((by % items.length) + items.length) % items.length;
-  return [...items.slice(k), ...items.slice(0, k)];
-}
-
 /* ---------------- التوليد ---------------- */
 
 const DIFFICULTY_ORDER = { easy: 1, medium: 2, hard: 3 } as const;
@@ -91,51 +85,37 @@ export function buildEssayForms(opts: EssayBuildOptions): EssayBuildResult {
   const perForm = Math.max(1, Math.min(opts.perForm, 10));
   const count = Math.max(1, Math.min(opts.count, 45));
   const pointers = new Map<string, number>(usableTopics.map((t) => [t, 0]));
-  const signatures = new Set<string>();
+  const usage = new Map<string, number>(usableTopics.map((t) => [t, 0]));
   const forms: EssayForm[] = [];
 
-  // ترتيب دروس ثابت + إزاحة مختلفة لكل نموذج حتى يختلف ترتيب الأسئلة أيضًا
+  // ترتيب دروس ثابت + إزاحة لكل نموذج، مع موازنة عدد المرات التي يظهر فيها كل درس
+  // حتى لا يتكرر أي سؤال داخل الخمسة والأربعين نموذجًا.
   const baseOrder = shuffleWithRng(usableTopics, rng);
 
   for (let i = 0; i < count; i++) {
-    const order = rotate(baseOrder, i);
-    let picked: EssayQuestion[] = [];
-    let signature = "";
+    const slotCount = Math.min(perForm, usableTopics.length);
 
-    for (let attempt = 0; attempt < 25; attempt++) {
-      const chosen = new Set<string>();
-      const row: EssayQuestion[] = [];
+    const chosenTopics = baseOrder
+      .map((topic, pos) => ({
+        topic,
+        uses: usage.get(topic) ?? 0,
+        offset: (pos - i + baseOrder.length) % baseOrder.length,
+      }))
+      .sort((a, b) => a.uses - b.uses || a.offset - b.offset)
+      .slice(0, slotCount)
+      .map((item) => item.topic);
 
-      for (let slot = 0; slot < perForm; slot++) {
-        const topic = order[slot % order.length];
-        const pool = pools.get(topic) as EssayQuestion[];
-        let idx = pointers.get(topic) ?? 0;
-        let guard = 0;
-        while (chosen.has(pool[idx % pool.length].id) && guard < pool.length) {
-          idx++;
-          guard++;
-        }
-        const question = pool[idx % pool.length];
-        pointers.set(topic, idx + 1);
-        chosen.add(question.id);
-        row.push(question);
-      }
+    const row = chosenTopics.map((topic) => {
+      const pool = pools.get(topic) as EssayQuestion[];
+      const idx = pointers.get(topic) ?? 0;
+      pointers.set(topic, idx + 1);
+      usage.set(topic, (usage.get(topic) ?? 0) + 1);
+      return pool[idx % pool.length];
+    });
 
-      const sig = row
-        .map((q) => q.id)
-        .sort()
-        .join("|");
-      if (!signatures.has(sig) || attempt === 24) {
-        picked = row;
-        signature = sig;
-        break;
-      }
-    }
-
-    signatures.add(signature);
     const ordered = opts.shuffleQuestions
-      ? shuffleWithRng(picked, createRng(opts.seed + i * 977, "order"))
-      : picked;
+      ? shuffleWithRng(row, createRng(opts.seed + i * 977, "order"))
+      : row;
 
     forms.push({
       number: i + 1,
@@ -145,10 +125,16 @@ export function buildEssayForms(opts: EssayBuildOptions): EssayBuildResult {
     });
   }
 
-  const poolSize = Math.min(...usableTopics.map((t) => pools.get(t)?.length ?? 0));
+  // سعة البنك: إجمالي الأسئلة ÷ أسئلة النموذج، مع مراعاة الدرس الأقل عددًا
+  const totalPool = usableTopics.reduce((sum, t) => sum + (pools.get(t)?.length ?? 0), 0);
+  const minPool = Math.min(...usableTopics.map((t) => pools.get(t)?.length ?? 0));
+  const capacity = Math.min(
+    Math.floor(totalPool / perForm),
+    Math.floor((minPool * usableTopics.length) / perForm)
+  );
   const notice =
-    count > poolSize
-      ? `البنك يحتوي ${poolSize} سؤالًا لكل درس بالصعوبة المختارة، لذلك ستتكرر بعض الأسئلة بين النماذج بعد النموذج ${poolSize}.`
+    count > capacity
+      ? `البنك يكفي ${capacity} نموذجًا مختلفًا بالصعوبة والتصنيف المختار، لذلك ستتكرر بعض الأسئلة بعد النموذج ${capacity}.`
       : null;
 
   return { forms, notice };
