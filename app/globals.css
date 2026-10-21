@@ -38,6 +38,18 @@ body {
   overflow-x: auto;
 }
 
+/**
+ * أداء المعاينة: الصفحة فيها حتى 24 ورقة A4. المتصفح يرسم فقط الأوراق
+ * الظاهرة على الشاشة ويترك الباقي بلا حساب تخطيط — فيبقى التفاعل مع
+ * أزرار الإعدادات سريعًا حتى على الموبايل. لا تأثير على الطباعة.
+ */
+@media screen {
+  .essay-sheet {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 297mm;
+  }
+}
+
 @media screen and (max-width: 900px) {
   .essay-zoom {
     zoom: 0.68;

@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { APP_VERSION } from "@/lib/version";
 import { BASE_FONT, CHAR_BUDGET, fittedFontSize } from "@/lib/essay/layout";
 import type {
@@ -135,7 +136,7 @@ function FormPaper({
   );
 }
 
-export function EssaySheet({
+function EssaySheetImpl({
   forms,
   layout,
   meta,
@@ -198,6 +199,12 @@ export function EssaySheet({
     </section>
   );
 }
+
+/**
+ * memo يمنع إعادة رسم الأوراق الاثنتي عشرة عند كل ضغطة على عنصر تحكم
+ * لا يخصها (مثل تشغيل/إيقاف خيار)، فيختفي الوميض أثناء التفاعل.
+ */
+export const EssaySheet = memo(EssaySheetImpl);
 
 function KeyPaper({
   form,
