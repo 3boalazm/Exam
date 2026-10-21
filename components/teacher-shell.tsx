@@ -58,6 +58,12 @@ export function TeacherShell({
               + اختبار جديد
             </Link>
             <Link
+              href="/essay-forms"
+              className="rounded-lg px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-100"
+            >
+              📄 نماذج مقالية
+            </Link>
+            <Link
               href="/settings"
               className="rounded-lg px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-100"
             >
